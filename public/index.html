@@ -64,6 +64,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;position:relative}
 .bubble pre{margin:0;padding:14px;overflow:auto;white-space:pre;color:#f1f2f6;font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace}
 .bubble pre code{background:none;padding:0;color:inherit}
 .inline-code-wrap{display:inline-flex;align-items:center;gap:3px}.inline-copy{font-size:10px;color:var(--muted);padding:0 4px;border-radius:5px}.inline-copy:hover{background:var(--hover)}
+.answer-meta{display:flex;align-items:center;gap:10px;margin-top:10px;padding-top:8px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.answer-meta .copy-all-btn{padding:4px 10px;border-radius:8px;border:1px solid var(--line);font-size:12px;color:var(--muted)}
+.answer-meta .copy-all-btn:hover{background:var(--hover);color:var(--text)}
 /* composer */
 .composer-wrap{padding:6px 20px 16px;width:min(800px,100%);margin:0 auto}
 .composer{display:flex;align-items:flex-end;gap:8px;padding:8px 8px 8px 18px;border:1.5px solid transparent;border-radius:28px;background:linear-gradient(var(--panel),var(--panel)) padding-box,linear-gradient(var(--line),var(--line)) border-box;box-shadow:0 2px 12px rgba(0,0,0,.05);transition:box-shadow .35s}
@@ -219,7 +222,7 @@ button:disabled{opacity:.45}
     if (!on) return;
     $('userName').textContent = me.admin ? '관리자' : me.user;
     $('userQuota').textContent = me.admin ? '질문 무제한' : '오늘 ' + Math.max(0, me.limit - me.used) + ' / ' + me.limit + '회 남음';
-    $('logout').style.display = me.admin ? 'none' : '';
+    $('logout').style.display = '';  // 관리자도 로그아웃 가능
     $('keyField').style.display = $('keyActions').style.display = me.admin ? '' : 'none';
     $('adminNote').style.display = me.admin ? 'none' : '';
   }
@@ -435,7 +438,6 @@ button:disabled{opacity:.45}
     result = result.replace(/\u0000CODE(\d+)\u0000/g, (_, n) => codeBlocks[Number(n)] || '');
     return result;
   }
-
   // Copy code from fenced blocks and inline `code`.
   $('chat').addEventListener('click', async e => {
     const copyButton = e.target.closest('.copy-code-btn, .inline-copy');
@@ -516,6 +518,7 @@ button:disabled{opacity:.45}
     const answerBubble = addMessage('assistant', '');
     answerBubble.innerHTML = '<p class="slow">생각 중…</p>';
     let answer = '', raf = 0;
+    const startTime = new Date();
     const slowTimer = setTimeout(() => { if (!answer) answerBubble.innerHTML = '<p class="slow">생각 중… <b>답장이 느립니다.</b> 조금 더 기다리거나 ■ 버튼으로 중지하세요.</p>'; }, 4000);
     try {
       const post = nt => fetch('/api/chat', { method: 'POST', signal: abortCtl.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, contents: history.slice(-30), temperature: Number($('temperature').value), noThink: nt }) });
@@ -563,7 +566,20 @@ button:disabled{opacity:.45}
       }
       cancelAnimationFrame(raf); answer = answer.trim();
       if (!answer) throw new Error('응답 텍스트가 없습니다. 모델명, API 할당량 또는 안전 필터 상태를 확인하세요.');
-      answerBubble.innerHTML = renderMarkdown(answer);
+      const endTime = new Date();
+      const fmt = d => d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const durationSec = ((endTime - startTime) / 1000).toFixed(1);
+      answerBubble.innerHTML = renderMarkdown(answer) +
+        '<div class="answer-meta"><span>시작 ' + fmt(startTime) + ' · 종료 ' + fmt(endTime) + ' · ' + durationSec + '초</span>' +
+        '<button type="button" class="copy-all-btn">답변 전체 복사</button></div>';
+      answerBubble.querySelector('.copy-all-btn').addEventListener('click', async function() {
+        try {
+          if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(answer);
+          else { const t = document.createElement('textarea'); t.value = answer; t.style.position = 'fixed'; t.style.opacity = '0'; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+          this.textContent = '복사됨 ✓';
+          setTimeout(() => { if (this.isConnected) this.textContent = '답변 전체 복사'; }, 1200);
+        } catch (_) { this.textContent = '복사 실패'; }
+      });
       saveRoomMessage('assistant', answer);
       history.push({ role: 'model', parts: [{ text: answer }] });
       $('chat').scrollTop = $('chat').scrollHeight;
@@ -571,7 +587,21 @@ button:disabled{opacity:.45}
       cancelAnimationFrame(raf);
       const part = answer.trim();
       if (stopped && part) {
-        answerBubble.innerHTML = renderMarkdown(part) + '<p class="slow" style="animation:none;margin-top:8px">■ 답장을 중지했습니다</p>';
+        const endTime = new Date();
+        const fmt = d => d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const durationSec = ((endTime - startTime) / 1000).toFixed(1);
+        answerBubble.innerHTML = renderMarkdown(part) +
+          '<p class="slow" style="animation:none;margin-top:8px">■ 답장을 중지했습니다</p>' +
+          '<div class="answer-meta"><span>시작 ' + fmt(startTime) + ' · 종료 ' + fmt(endTime) + ' · ' + durationSec + '초</span>' +
+          '<button type="button" class="copy-all-btn">답변 전체 복사</button></div>';
+        answerBubble.querySelector('.copy-all-btn').addEventListener('click', async function() {
+          try {
+            if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(part);
+            else { const t = document.createElement('textarea'); t.value = part; t.style.position = 'fixed'; t.style.opacity = '0'; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+            this.textContent = '복사됨 ✓';
+            setTimeout(() => { if (this.isConnected) this.textContent = '답변 전체 복사'; }, 1200);
+          } catch (_) { this.textContent = '복사 실패'; }
+        });
         saveRoomMessage('assistant', part);
         history.push({ role: 'model', parts: [{ text: part }] });
         return;
