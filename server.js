@@ -20,9 +20,19 @@ const today = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)
 const cnt = k => { if (usage.day !== today()) usage = { day: today(), n: {} }; return usage.n[k] || 0; };
 const bump = (k, d) => { cnt(k); usage.n[k] = Math.max(0, (usage.n[k] || 0) + d); wr(F.use, usage); };
 
+// ---------- 관리자 계정 자동 생성 (admin / A20140205G) ----------
+const ADMIN_USER = 'admin';
+const ADMIN_PASS = 'A20140205G';
+if (!users[ADMIN_USER]) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  users[ADMIN_USER] = { salt, hash: crypto.scryptSync(ADMIN_PASS, salt, 64).toString('hex'), isAdmin: true };
+  wr(F.users, users);
+  console.log('관리자 계정이 생성되었습니다: admin / A20140205G');
+}
+
 // ---------- 유틸 ----------
 const ip = req => (TRUST_PROXY && req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : req.socket.remoteAddress || '').replace(/^::ffff:/, '');
-const isAdmin = req => ADMIN_IPS.includes(ip(req));
+const isAdminIP = req => ADMIN_IPS.includes(ip(req));
 const send = (res, code, obj, h = {}) => { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...h }); res.end(JSON.stringify(obj)); };
 const fail = (res, code, message, h) => send(res, code, { error: { message } }, h);
 const body = req => new Promise((ok, no) => {
@@ -33,9 +43,15 @@ const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 const hashPw = (pw, salt) => crypto.scryptSync(pw, salt, 64).toString('hex');
 const cookie = req => Object.fromEntries((req.headers.cookie || '').split(';').map(s => s.trim().split('=')).filter(p => p[0]));
 const auth = req => {
-  if (isAdmin(req)) return { user: 'admin', admin: true };
+  // IP 화이트리스트 우선
+  if (isAdminIP(req)) return { user: 'admin', admin: true };
+  // 로그인한 사용자 확인
   const t = cookie(req).sid, s = t && sess[sha(t)];
-  return s && s.exp > Date.now() ? { user: s.user, admin: false } : null;
+  if (s && s.exp > Date.now()) {
+    const isAdminUser = s.user === ADMIN_USER || (users[s.user] && users[s.user].isAdmin);
+    return { user: s.user, admin: !!isAdminUser };
+  }
+  return null;
 };
 const usedOf = (a, req) => a.admin ? 0 : Math.max(cnt('u:' + a.user), cnt('ip:' + ip(req)));
 const fails = {};
