@@ -1,0 +1,1122 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#6c5ce7">
+<link rel="preconnect" href="https://generativelanguage.googleapis.com">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<title>Gims AI</title>
+<style>
+@property --a{syntax:'<angle>';inherits:false;initial-value:0deg}
+:root{color-scheme:light dark;
+ --bg:#fcfcfd;--side:#f5f5f8;--panel:#fff;--text:#15151c;--muted:#6b6e7c;--faint:#9a9dab;--line:#e7e8ee;--hover:#eceef4;--user:#efeff6;--ink:#15151c;--onink:#fff;
+ --accent:#6c5ce7;--accent-soft:rgba(108,92,231,.1);--ok:#12a36b;--err:#e5484d;--warn:#d98a00;
+ --aura:#5b8def,#8b5cf6,#ec5fa8,#ffb454,#5b8def;
+ --shadow:0 1px 2px rgba(20,20,40,.04),0 8px 28px -10px rgba(20,20,40,.12);--shadow-lg:0 30px 80px -20px rgba(20,20,50,.35);
+ --r:16px;--ease:cubic-bezier(.22,.8,.3,1)}
+@media(prefers-color-scheme:dark){:root{
+ --bg:#0e0e12;--side:#0a0a0d;--panel:#17171d;--text:#ececf2;--muted:#9295a4;--faint:#6a6d7b;--line:#25252e;--hover:#1d1d25;--user:#1c1c25;--ink:#ececf2;--onink:#0e0e12;
+ --accent:#8b7dff;--accent-soft:rgba(139,125,255,.14);--ok:#3ecf8e;--err:#ff6b70;--warn:#f5b53f;
+ --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 28px -10px rgba(0,0,0,.5);--shadow-lg:0 30px 80px -20px rgba(0,0,0,.7)}}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.7 "Pretendard Variable",Pretendard,"Apple SD Gothic Neo","Noto Sans KR","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased;letter-spacing:-.1px}
+button,input,textarea,select{font:inherit;color:inherit;letter-spacing:inherit}
+button{background:none;border:0;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+::selection{background:var(--accent-soft)}
+*{scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.app-layout{display:flex;height:100%;position:relative;overflow:hidden}
+/* sidebar */
+aside{width:272px;flex:0 0 272px;background:var(--side);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:16px 12px 12px;gap:6px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:760;font-size:16.5px;letter-spacing:-.4px;padding:2px 8px 14px}
+.brand-mark{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;color:#fff;font-size:15px;font-weight:800;background:conic-gradient(from 200deg,var(--aura));box-shadow:0 4px 14px -4px rgba(139,92,246,.6)}
+.new{display:flex;align-items:center;gap:9px;padding:10px 13px;border-radius:12px;font-weight:600;font-size:14px;color:var(--accent);background:var(--accent-soft);transition:background .2s,transform .2s var(--ease)}
+.new:hover{background:color-mix(in srgb,var(--accent) 18%,transparent)}.new:active{transform:scale(.98)}
+.side-title{font-size:11.5px;color:var(--faint);font-weight:650;padding:16px 12px 4px;letter-spacing:.4px;text-transform:uppercase}
+#roomList{flex:1;overflow:auto;display:flex;flex-direction:column;gap:1px;margin:0 -4px;padding:0 4px}
+.room-item{display:flex;align-items:center;border-radius:10px;min-width:0;position:relative;transition:background .15s}
+.room-item:hover{background:var(--hover)}
+.room-item.active{background:var(--panel);box-shadow:0 0 0 1px var(--line),var(--shadow);font-weight:600}
+.room-item.active::before{content:"";position:absolute;left:-1px;top:9px;bottom:9px;width:3px;border-radius:3px;background:var(--accent)}
+.room-item .room-name{display:block;flex:1;min-width:0;text-align:left;padding:8px 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px}
+.room-tools{display:flex;opacity:0;padding-right:4px;transition:opacity .15s}.room-item:hover .room-tools,.room-item:focus-within .room-tools{opacity:1}
+.room-tool{color:var(--muted);padding:4px 6px;border-radius:7px;display:grid;place-items:center}.room-tool:hover{color:var(--text)}
+.room-tools .room-tool:hover{background:var(--hover)}
+.room-tools svg.i{width:15px;height:15px}
+.userbox{display:flex;align-items:center;gap:10px;padding:10px;border-radius:14px;background:var(--panel);border:1px solid var(--line);margin-top:6px}
+.ub-ava{flex:0 0 34px;height:34px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;font-size:14px;background:conic-gradient(from 200deg,var(--aura))}
+.ub-main{display:flex;flex-direction:column;min-width:0;flex:1;line-height:1.35;gap:3px}
+.ub-top{display:flex;align-items:center;gap:6px;min-width:0}
+.ub-top b{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;font-weight:650;color:var(--ok);background:color-mix(in srgb,var(--ok) 13%,transparent);padding:1px 7px;border-radius:99px;white-space:nowrap}
+.badge svg.i{width:10px;height:10px;stroke-width:3}
+.ub-main span{font-size:11.5px;color:var(--muted)}
+.qbar{height:4px;border-radius:4px;background:var(--hover);overflow:hidden}.qbar i{display:block;height:100%;width:0;border-radius:4px;background:linear-gradient(90deg,#5b8def,#8b5cf6,#ec5fa8);transition:width .5s var(--ease)}
+.iconbtn{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;color:var(--muted);flex:none}.iconbtn:hover{background:var(--hover);color:var(--text)}
+.foot-btn{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;color:var(--muted);font-size:13.5px;font-weight:550}
+.foot-btn:hover{background:var(--hover);color:var(--text)}
+/* admin panel */
+#adminPanel{position:fixed;inset:0;z-index:35;display:none;place-items:center;padding:16px;background:rgba(8,8,14,.55);backdrop-filter:blur(8px)}
+#adminPanel.open{display:grid}
+.admin-inner{width:min(720px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:22px;display:flex;flex-direction:column;gap:14px;box-shadow:var(--shadow-lg);animation:pop .3s var(--ease)}
+.admin-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.admin-toolbar input[type=search]{flex:1;min-width:140px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 13px}
+.admin-meta{font-size:12.5px;color:var(--muted)}
+.admin-list{display:flex;flex-direction:column;gap:8px}
+.admin-user{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--bg)}
+.admin-user .au-name{font-weight:650;font-size:14px;min-width:0}
+.admin-user .au-email{font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px}
+.admin-user .au-stats{font-size:12px;color:var(--faint);margin-left:auto}
+.admin-user .au-actions{display:flex;gap:6px;flex-wrap:wrap;width:100%}
+.admin-user .au-actions input{width:88px;padding:7px 10px;border-radius:10px;border:1px solid var(--line);background:var(--panel);font-size:13px}
+.admin-user.banned{opacity:.75;border-color:color-mix(in srgb,var(--err) 40%,var(--line))}
+.admin-user .ban-tag{font-size:10.5px;font-weight:650;color:var(--err);background:color-mix(in srgb,var(--err) 12%,transparent);padding:1px 7px;border-radius:99px}
+.admin-more{align-self:center;padding:10px 20px;border-radius:12px;border:1px solid var(--line);font-weight:600;font-size:13.5px}
+.admin-more:hover{background:var(--hover)}
+.admin-empty{text-align:center;color:var(--muted);padding:28px 12px;font-size:14px}
+/* main */
+main{flex:1;min-width:0;display:flex;flex-direction:column;position:relative;background:var(--bg)}
+.topbar{display:none;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--line);backdrop-filter:blur(12px)}
+.topbar .t{font-weight:700;letter-spacing:-.3px}
+.icon{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;color:var(--muted)}.icon:hover{background:var(--hover);color:var(--text)}
+#chat{flex:1;overflow:auto;padding:32px 20px 12px;display:flex;flex-direction:column;gap:28px;scroll-behavior:smooth}
+#chat>*{width:min(760px,100%);margin-inline:auto}
+/* welcome */
+.welcome{margin:auto;text-align:center;isolation:isolate;padding:24px 0}
+.aura-wrap{position:relative;display:inline-block;padding:6px 10px}
+.aura-wrap::before{content:"";position:absolute;inset:-30px -80px;z-index:-1;filter:blur(40px);opacity:.5;border-radius:50%;background:radial-gradient(closest-side at 25% 50%,#5b8def,transparent),radial-gradient(closest-side at 55% 40%,#8b5cf6,transparent),radial-gradient(closest-side at 80% 55%,#ec5fa8,transparent);animation:drift 8s ease-in-out infinite alternate}
+.aura-title{margin:0;font-size:clamp(30px,5.4vw,48px);font-weight:790;letter-spacing:-1.6px;line-height:1.25;background:linear-gradient(90deg,#5b8def,#8b5cf6,#ec5fa8,#ffb454,#5b8def);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:flow 8s linear infinite}
+.welcome p{color:var(--muted);margin:14px 0 28px;font-size:15.5px}
+.chips{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:640px;margin:0 auto}
+.chip{display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;border:1px solid var(--line);border-radius:16px;padding:14px 15px;font-size:13.5px;font-weight:600;background:var(--panel);box-shadow:var(--shadow);transition:transform .25s var(--ease),border-color .2s,box-shadow .25s}
+.chip small{font-weight:450;color:var(--muted);font-size:12.5px;line-height:1.5}
+.chip .ci{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent)}.chip .ci svg.i{width:16px;height:16px}
+.chip:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--accent) 50%,var(--line))}
+/* messages */
+.msg{display:flex;gap:14px;align-items:flex-start;animation:rise .35s var(--ease) both}
+.avatar{flex:0 0 30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:13px;background:conic-gradient(from 200deg,var(--aura));margin-top:2px}
+.avatar svg.i{width:15px;height:15px;stroke-width:2}
+.msg.user{justify-content:flex-end}.msg.user .avatar{display:none}
+.bubble{min-width:0;max-width:100%;overflow-wrap:anywhere;padding:2px 0}
+.msg.user .bubble{max-width:78%;background:var(--user);border-radius:22px 22px 6px 22px;padding:11px 17px;white-space:pre-wrap}
+.bubble p{margin:0 0 12px}.bubble p:last-child{margin:0}
+.bubble h1,.bubble h2,.bubble h3{line-height:1.35;margin:22px 0 8px;letter-spacing:-.4px}
+.bubble ul,.bubble ol{padding-left:24px;margin:4px 0 12px}.bubble li{margin:3px 0}.bubble li::marker{color:var(--accent)}
+.bubble blockquote{border-left:3px solid var(--accent);margin:12px 0;padding:2px 16px;color:var(--muted);background:var(--accent-soft);border-radius:0 10px 10px 0}
+.bubble code{font:.87em ui-monospace,SFMono-Regular,Consolas,monospace;background:var(--hover);padding:2px 6px;border-radius:6px}
+.bubble table{border-collapse:separate;border-spacing:0;display:block;overflow:auto;max-width:100%;margin:12px 0;border:1px solid var(--line);border-radius:12px}
+.bubble th,.bubble td{border-bottom:1px solid var(--line);padding:8px 13px;text-align:left}.bubble tr:last-child td{border-bottom:0}.bubble th{background:var(--hover);font-weight:650}
+.code-card{margin:14px 0;border:1px solid #23242d;border-radius:14px;overflow:hidden;background:#101116;box-shadow:var(--shadow)}
+.code-toolbar{display:flex;align-items:center;justify-content:space-between;padding:6px 8px 6px 14px;background:#171820;color:#8e92a3;font-size:12px;font-family:ui-monospace,Consolas,monospace}
+.code-actions{display:flex;gap:2px}.code-toolbar button{display:inline-flex;align-items:center;gap:5px;color:#b6bacb;padding:5px 9px;border-radius:7px;font:12px/1 Pretendard,system-ui,sans-serif}.code-toolbar button:hover{background:#262834;color:#fff}
+.bubble pre{margin:0;padding:15px 16px;overflow:auto;white-space:pre;color:#eceef5;font:13px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace}
+.bubble pre code{background:none;padding:0;color:inherit}
+.inline-code-wrap{display:inline-flex;align-items:center;gap:3px}.inline-copy{font-size:10px;color:var(--faint);padding:0 4px;border-radius:5px}.inline-copy:hover{background:var(--hover)}
+.answer-meta{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:12px;color:var(--faint);flex-wrap:wrap}
+.answer-meta .copy-all-btn{padding:4px 11px;border-radius:99px;border:1px solid var(--line);font-size:12px;color:var(--muted);margin-left:auto}
+.answer-meta .copy-all-btn:hover{background:var(--hover);color:var(--text)}
+/* composer */
+.composer-wrap{padding:6px 20px 18px;width:min(800px,100%);margin:0 auto}
+.composer{display:flex;align-items:flex-end;gap:6px;padding:8px 8px 8px 12px;border:1.5px solid transparent;border-radius:26px;background:linear-gradient(var(--panel),var(--panel)) padding-box,linear-gradient(var(--line),var(--line)) border-box;box-shadow:var(--shadow);transition:box-shadow .35s}
+.composer:focus-within{background:linear-gradient(var(--panel),var(--panel)) padding-box,conic-gradient(from var(--a),var(--aura)) border-box;animation:spin 6s linear infinite;box-shadow:0 0 30px -6px rgba(139,92,246,.4),0 0 70px -14px rgba(91,141,239,.4)}
+.composer textarea{flex:1;resize:none;min-height:40px;max-height:200px;background:none;border:0;outline:0;padding:9px 4px;line-height:1.55}
+.composer textarea::placeholder{color:var(--faint)}
+.send{position:relative;isolation:isolate;flex:0 0 40px;height:40px;border-radius:50%;display:grid;place-items:center;color:var(--onink)}
+.send::after{content:"";position:absolute;inset:0;border-radius:50%;background:var(--ink);opacity:.16;z-index:-1;transition:opacity .25s}
+.send::before{content:"";position:absolute;inset:-4px;border-radius:50%;background:conic-gradient(from var(--a),var(--aura));filter:blur(7px);opacity:0;z-index:-2;transition:opacity .3s}
+.send.ready::after,.send.busy::after{opacity:1}
+.send.ready::before{opacity:.8;animation:spin 4s linear infinite}
+.send.busy::before{opacity:1;animation:spin 1.1s linear infinite}
+.send.busy{cursor:pointer}.send .ic-stop{display:none}.send.busy .ic-stop{display:block}.send.busy .ic-up{display:none}
+.slow{color:var(--muted);margin:0;animation:pulse 1.6s ease-in-out infinite}.slow b{color:var(--warn);font-weight:650}
+@keyframes pulse{50%{opacity:.5}}.send svg{width:18px;height:18px}
+.hint{text-align:center;color:var(--faint);font-size:11.5px;margin-top:9px}
+.composer-tools{display:flex;gap:2px;align-items:center;padding-bottom:3px}
+.composer-tools label{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:var(--muted);cursor:pointer;transition:background .15s,color .15s}
+.composer-tools label:hover{background:var(--hover);color:var(--text)}
+.composer-tools input[type=file]{display:none}
+.attach-bar{display:none;flex-wrap:wrap;gap:6px;padding:0 4px 8px;width:min(800px,100%);margin:0 auto}
+.attach-bar.has{display:flex}
+.attach-chip{display:flex;align-items:center;gap:7px;padding:4px 8px 4px 5px;border-radius:12px;background:var(--panel);border:1px solid var(--line);font-size:12px;max-width:220px;box-shadow:var(--shadow)}
+.attach-chip img{width:28px;height:28px;border-radius:8px;object-fit:cover}
+.attach-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.attach-chip .rm{color:var(--muted);padding:0 3px;font-size:13px}.attach-chip .rm:hover{color:var(--err)}
+/* modal */
+#settings{position:fixed;inset:0;z-index:30;display:none;place-items:center;padding:16px;background:rgba(8,8,14,.55);backdrop-filter:blur(8px)}
+#settings.open{display:grid}
+.settings-inner{width:min(480px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:22px;display:flex;flex-direction:column;gap:16px;box-shadow:var(--shadow-lg);animation:pop .3s var(--ease)}
+.modal-head{display:flex;align-items:center;justify-content:space-between}.modal-head h2{margin:0;font-size:19px;letter-spacing:-.5px}
+.sec{display:flex;flex-direction:column;gap:12px;padding:16px;border:1px solid var(--line);border-radius:18px;background:var(--bg)}
+.sec h3{margin:0;font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px;letter-spacing:-.2px}.sec h3 svg.i{width:16px;height:16px;color:var(--accent)}
+.field{display:flex;flex-direction:column;gap:6px}.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label{font-size:12.5px;color:var(--muted);font-weight:550}
+input,select{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 13px;min-width:0;transition:border-color .15s,box-shadow .15s}
+input:focus,select:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.setting-actions{display:flex;gap:8px;flex-wrap:wrap}
+.primary,.ghost{padding:10px 16px;border-radius:12px;font-weight:600;font-size:14px;transition:transform .15s,background .15s,opacity .15s}
+.primary{background:var(--ink);color:var(--onink)}.primary:hover{opacity:.88}.primary:active,.ghost:active{transform:scale(.97)}
+.ghost{border:1px solid var(--line);background:var(--panel)}.ghost:hover{background:var(--hover)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.status{font-size:12.5px;color:var(--muted);min-height:1em}.status.error{color:var(--err)}.status.ok{color:var(--ok)}.notice{font-size:12px;color:var(--faint);margin:0;line-height:1.6}
+.adm{border:1px dashed var(--line);border-radius:14px;padding:0 14px}
+.adm summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:12px 0;font-size:12.5px;font-weight:600;color:var(--muted)}
+.adm summary::-webkit-details-marker{display:none}.adm summary svg.i{width:15px;height:15px}
+.adm[open] summary{color:var(--text)}.adm-body{display:flex;flex-direction:column;gap:12px;padding:0 0 14px}
+.mailwarn{font-size:12.5px;color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent);padding:9px 12px;border-radius:10px;line-height:1.5}
+.otp{display:flex;gap:8px}.otp input{flex:1;text-align:center;font:700 22px/1 ui-monospace,Consolas,monospace;letter-spacing:8px;padding:12px 8px 12px 16px}
+/* preview */
+.preview-pane{display:none;flex:0 0 min(46%,680px);min-width:320px;border-left:1px solid var(--line);background:var(--panel);flex-direction:column;min-height:0}
+.preview-pane.open{display:flex}
+.preview-top{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--line)}
+.preview-title{font-weight:700;font-size:14px}.preview-controls{display:flex;gap:6px}
+.preview-controls button{font-size:13px;padding:6px 12px;border-radius:9px;border:1px solid var(--line);font-weight:550}.preview-controls #runPreview{background:var(--ink);color:var(--onink);border-color:transparent}
+.preview-editor{height:32%;min-height:110px;resize:vertical;width:100%;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:12px;font:12px/1.5 ui-monospace,Consolas,monospace;background:var(--bg);outline:0}
+.preview-frame-wrap{flex:1;min-height:0;padding:10px;background:var(--side)}
+#previewFrame{width:100%;height:100%;border:1px solid var(--line);border-radius:12px;background:#fff}
+#scrim{display:none}
+/* auth */
+.loading .app-layout{visibility:hidden}
+#auth{position:fixed;inset:0;z-index:40;background:var(--bg);display:none;place-items:center;padding:20px;overflow:auto}
+#auth::before,#auth::after{content:"";position:fixed;width:46vmax;height:46vmax;border-radius:50%;filter:blur(90px);opacity:.28;z-index:0;pointer-events:none}
+#auth::before{left:-14vmax;top:-18vmax;background:#5b8def;animation:drift 10s ease-in-out infinite alternate}
+#auth::after{right:-16vmax;bottom:-20vmax;background:#ec5fa8;animation:drift 12s ease-in-out infinite alternate-reverse}
+.auth-card{position:relative;z-index:1;width:min(400px,100%);text-align:center;padding:34px 30px 28px;border-radius:28px;background:color-mix(in srgb,var(--panel) 82%,transparent);backdrop-filter:blur(22px);border:1px solid var(--line);box-shadow:var(--shadow-lg);animation:pop .5s var(--ease)}
+.auth-card p.sub{color:var(--muted);margin:10px 0 24px;font-size:14px}
+#authTabs{display:grid;grid-template-columns:1fr 1fr;background:var(--hover);border-radius:13px;padding:4px;margin-bottom:16px}
+#authTabs button{padding:8px;border-radius:10px;font-weight:600;color:var(--muted);font-size:14px;transition:all .2s}
+#authTabs button.on{background:var(--panel);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.12)}
+#authForm{display:flex;flex-direction:column;gap:10px;text-align:left}#authForm input{padding:13px 15px;border-radius:14px}
+.go-wrap{position:relative;isolation:isolate;margin-top:6px}
+.go-wrap::before{content:"";position:absolute;inset:-3px;border-radius:16px;background:conic-gradient(from var(--a),var(--aura));filter:blur(10px);opacity:.6;z-index:-1;animation:spin 4s linear infinite}
+#authGo{width:100%;padding:13px;border-radius:14px;font-size:15px}
+#authErr{text-align:center}
+/* toast */
+#toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);z-index:60;background:var(--ink);color:var(--onink);padding:10px 18px;border-radius:99px;font-size:13.5px;font-weight:550;box-shadow:var(--shadow-lg);opacity:0;pointer-events:none;transition:all .3s var(--ease);max-width:calc(100vw - 32px)}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+@keyframes spin{to{--a:360deg}}
+@keyframes flow{to{background-position:-250% 0}}
+@keyframes drift{from{transform:translateX(-4%) scale(.96)}to{transform:translateX(4%) scale(1.06)}}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}}
+@keyframes pop{from{opacity:0;transform:translateY(10px) scale(.97)}}
+@media(max-width:900px){.preview-pane.open{position:absolute;inset:0;z-index:10;flex-basis:auto;min-width:0;border:0}}
+@media(max-width:760px){
+ aside{position:fixed;inset:0 auto 0 0;width:290px;z-index:25;transform:translateX(-100%);transition:transform .25s var(--ease);box-shadow:var(--shadow-lg)}
+ aside.open{transform:none}aside.open~#scrim{display:block;position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
+ .topbar{display:flex}.room-tools{opacity:1}.row2{grid-template-columns:1fr}
+ #chat{padding:20px 14px 8px}.composer-wrap{padding:6px 12px 12px}.hint{display:none}
+ .chips{grid-template-columns:1fr}.chip{flex-direction:row;align-items:center}.chip small{display:none}
+ .auth-card{padding:28px 22px 22px}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;scroll-behavior:auto!important;transition:none!important}}
+</style>
+</head>
+<body class="loading">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+<symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+<symbol id="i-img" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></symbol>
+<symbol id="i-clip" viewBox="0 0 24 24"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></symbol>
+<symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+<symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
+<symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3.5 7l8.5 6 8.5-6"/></symbol>
+<symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/></symbol>
+<symbol id="i-code" viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></symbol>
+<symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 19V5M8 7h7"/></symbol>
+<symbol id="i-out" viewBox="0 0 24 24"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10"/></symbol>
+</defs></svg>
+<div class="app-layout">
+<aside id="side">
+  <div class="brand"><span class="brand-mark">G</span> Gims AI</div>
+  <button id="createRoom" class="new"><svg class="i"><use href="#i-plus"/></svg>새 채팅</button>
+  <div class="side-title">채팅 기록</div>
+  <div id="roomList"></div>
+  <div class="userbox">
+    <div class="ub-ava" id="userAva">G</div>
+    <div class="ub-main"><div class="ub-top"><b id="userName"></b><span id="userBadge"></span></div><span id="userQuota"></span><div class="qbar" id="qbarWrap"><i id="qbar"></i></div></div>
+    <button id="logout" class="iconbtn" title="로그아웃" aria-label="로그아웃"><svg class="i"><use href="#i-out"/></svg></button>
+  </div>
+  <button id="adminToggle" class="foot-btn" style="display:none"><svg class="i"><use href="#i-key"/></svg>관리자 패널</button>
+  <button id="settingsToggle" class="foot-btn"><svg class="i"><use href="#i-gear"/></svg>설정</button>
+</aside>
+<div id="scrim"></div>
+<main>
+  <div class="topbar"><button id="menu" class="icon" aria-label="메뉴"><svg class="i"><use href="#i-menu"/></svg></button><span class="t">Gims AI</span><button id="newChat" class="icon" aria-label="새 채팅"><svg class="i"><use href="#i-plus"/></svg></button></div>
+  <div id="chat" aria-live="polite"></div>
+  <div class="composer-wrap">
+    <div class="attach-bar" id="attachBar"></div>
+    <div class="composer">
+      <div class="composer-tools">
+        <label title="사진 첨부" aria-label="사진 첨부"><input type="file" id="photoInput" accept="image/*" multiple><svg class="i" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="3.5"/><circle cx="9" cy="10" r="1.5"/><path d="M20.5 15.5l-4.2-4.2a1.5 1.5 0 0 0-2.1 0L6 19.5"/></svg></label>
+        <label title="파일 첨부" aria-label="파일 첨부"><input type="file" id="fileInput" accept=".txt,.md,.json,.csv,.js,.ts,.py,.html,.css,.xml,.log,.pdf"><svg class="i" viewBox="0 0 24 24"><path d="M20.2 11.6l-7.6 7.6a5 5 0 0 1-7.1-7.1l7.9-7.9a3.3 3.3 0 0 1 4.7 4.7l-7.9 7.9a1.7 1.7 0 0 1-2.4-2.4l7.2-7.2"/></svg></label>
+      </div>
+      <textarea id="prompt" rows="1" placeholder="무엇이든 물어보세요" aria-label="메시지 입력"></textarea>
+      <button id="send" class="send" aria-label="전송"><svg class="ic-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg><svg class="ic-stop" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg></button>
+    </div>
+    <div class="hint">Enter 줄바꿈 · Ctrl+Enter 또는 ↑ 버튼으로 전송</div>
+  </div>
+</main>
+<section class="preview-pane" id="previewPane" aria-label="코드 프리뷰">
+  <div class="preview-top">
+    <div class="preview-title">코드 프리뷰</div>
+    <div class="preview-controls"><button id="runPreview"><svg class="i" viewBox="0 0 24 24" style="width:12px;height:12px;fill:currentColor;stroke:none;vertical-align:-1px"><path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5z"/></svg> 실행</button><button id="closePreview" aria-label="프리뷰 닫기">닫기</button></div>
+  </div>
+  <textarea id="previewEditor" class="preview-editor" spellcheck="false" aria-label="프리뷰 코드" placeholder="HTML 코드를 여기에 입력하세요."></textarea>
+  <div class="preview-frame-wrap"><iframe id="previewFrame" title="실행 결과" sandbox="allow-scripts allow-forms allow-modals"></iframe></div>
+</section>
+</div>
+<div id="settings" role="dialog" aria-modal="true" aria-labelledby="st">
+  <div class="settings-inner">
+    <div class="modal-head"><h2 id="st">설정</h2><button id="closeSettings" class="icon" aria-label="닫기"><svg class="i"><use href="#i-x"/></svg></button></div>
+    <div class="sec">
+      <h3><svg class="i"><use href="#i-spark"/></svg>모델</h3>
+      <div class="row2">
+        <div class="field"><label for="model">모델</label><select id="model"><option value="flash">Flash · 빠르고 균형 잡힌 기본</option><option value="flash-lite">Flash-Lite · 가장 빠름</option><option value="pro">Pro · 가장 똑똑함</option><option value="coding">Coding · 코딩 전용</option></select></div>
+        <div class="field"><label for="temperature">창의성</label><select id="temperature"><option value="0.3">낮음</option><option value="0.7" selected>보통</option><option value="1">높음</option></select></div>
+      </div>
+    </div>
+    <div class="sec">
+      <h3><svg class="i"><use href="#i-mail"/></svg>이메일 인증</h3>
+      <div class="field"><label for="accEmail">Gmail 주소</label><input id="accEmail" type="email" placeholder="example@gmail.com" autocomplete="email"></div>
+      <div class="setting-actions">
+        <button id="saveEmail" class="ghost" type="button">이메일 저장</button>
+        <button id="reqVerify" class="primary" type="button">인증 코드 받기</button>
+      </div>
+      <div class="field" id="verifyBox" style="display:none">
+        <label for="verifyCode">메일로 받은 6자리 코드</label>
+        <div class="otp"><input id="verifyCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••"><button id="confirmVerify" class="primary" type="button">확인</button></div>
+      </div>
+      <div class="mailwarn" id="mailWarn" style="display:none">서버에 메일 발송 설정이 없습니다. 관리자가 GMAIL_USER / GMAIL_APP_PASSWORD 환경변수를 설정해야 인증 메일이 발송됩니다.</div>
+      <span id="accStatus" class="status"></span>
+      <p class="notice" id="verifyNote">이메일을 인증하면 하루 질문 한도가 +30회 늘어납니다.</p>
+    </div>
+    <details class="adm" id="keySec" style="display:none">
+      <summary><svg class="i"><use href="#i-key"/></svg>관리자 전용 · API 키 관리</summary>
+      <div class="adm-body">
+        <div class="field" id="keyField"><label for="apiKey">Google Gemini API 키</label><input id="apiKey" type="text" autocomplete="off" spellcheck="false" placeholder="Gemini API 키를 입력하세요"></div>
+        <div class="setting-actions" id="keyActions"><button id="saveKey" class="primary">키 저장</button><button id="forgetKey" class="ghost">저장된 키 삭제</button></div>
+        <span id="keyStatus" class="status"></span>
+      </div>
+    </details>
+  </div>
+</div>
+<div id="auth"><div class="auth-card">
+  <div class="aura-wrap"><h1 class="aura-title">Gims AI</h1></div>
+  <p class="sub">로그인하면 어느 기기에서든 대화가 이어집니다.</p>
+  <div id="authTabs"><button data-mode="login" class="on" type="button">로그인</button><button data-mode="register" type="button">가입</button></div>
+  <form id="authForm">
+    <input id="authUser" autocomplete="username" placeholder="아이디" maxlength="20" required>
+    <input id="authPass" type="password" autocomplete="current-password" placeholder="비밀번호 (6자 이상)" required>
+    <div class="go-wrap"><button id="authGo" class="primary">로그인</button></div>
+    <div id="authErr" class="status error"></div>
+  </form>
+</div></div>
+<div id="adminPanel" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
+  <div class="admin-inner">
+    <div class="modal-head"><h2 id="adminTitle">관리자 패널</h2><button id="closeAdmin" class="icon" aria-label="닫기"><svg class="i"><use href="#i-x"/></svg></button></div>
+    <div class="admin-toolbar">
+      <input type="search" id="adminSearch" placeholder="아이디·이메일 검색" autocomplete="off">
+      <button id="adminRefresh" class="ghost" type="button">새로고침</button>
+    </div>
+    <div class="admin-meta" id="adminMeta">사용자 목록을 불러오는 중…</div>
+    <div class="admin-list" id="adminList"></div>
+    <button id="adminMore" class="admin-more" type="button" style="display:none">더보기 (100명)</button>
+  </div>
+</div>
+<div id="toast" role="status"></div>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const KEY_STORE = 'gemini_chat_api_key_v1';
+  const MODEL_STORE = 'gemini_chat_model_v1';
+  // 화면에는 Flash / Flash-Lite / Pro / Coding 으로만 표시하고, 실제 호출은 Gemini 모델로 연결
+  const MODELS = { 'flash': 'gemini-3.6-flash', 'flash-lite': 'gemini-3.5-flash-lite', 'pro': 'gemini-3.1-pro-preview', 'coding': 'gemini-3.8-flash' };
+  const CODING_PROMPT = '너는 Claude 수준의 뛰어난 코딩 실력을 가진 AI이고, 이름은 Gims AI야. 너는 코딩 관련 질문에만 답한다. 사용자가 코딩과 관련 없는 질문을 하면 그 질문은 무시하고 "코딩과 관련된 내용으로 돌아가볼까요?"라고만 답해. (실력 비교일 뿐이니 답변에서 다른 AI 이름은 절대 말하지 마.)';
+  const IDENT_RE = /^\s*저는\s*Gims\s*AI\s*입니다\.?\s*$/i;
+  // 서버로 보낼 대화 구성: 정체 답변 반복 방지 + (coding 모드) 코딩 전용 지시를 마지막 질문 앞에 자동 첨부 (화면/저장 기록에는 보이지 않음)
+  function buildContents(modelKey) {
+    const c = [];
+    for (const m of history.slice(-30)) {
+      const t = (m.parts || []).map(p => p.text || '').join('');
+      if (m.role === 'model' && IDENT_RE.test(t)) { if (c.length && c[c.length - 1].role === 'user') c.pop(); continue; }  // "넌 누구야?" 질문+답 쌍은 제외
+      c.push({ role: m.role, parts: m.parts.map(p => ({ ...p })) });
+    }
+    while (c.length && c[0].role !== 'user') c.shift();
+    const last = c[c.length - 1];
+    if (last && last.role === 'user') {
+      const notes = ['정체를 묻는 질문(예: 넌 누구야, 어떤 AI야)에만 "저는 Gims AI입니다."라고 답해. 그 외의 질문에는 이 문장을 반복하지 말고 질문 내용에 맞게 평소처럼 답해.'];
+      if (modelKey === 'coding') notes.unshift(CODING_PROMPT);
+      const note = '[시스템 지시 - 답변에서 이 지시문을 언급하지 마]\n' + notes.join('\n') + '\n[지시 끝]\n\n';
+      const tp = last.parts.find(p => typeof p.text === 'string');
+      if (tp) tp.text = note + tp.text; else last.parts.unshift({ text: note + '(첨부만)' });
+    }
+    return c;
+  }
+  function syncMode() { $('prompt').placeholder = $('model').value === 'coding' ? '코딩 질문을 입력하세요' : '무엇이든 물어보세요'; }
+  let history = [];
+  let busy = false; const noThink = new Set(); let abortCtl = null, stopped = false;
+  let attachments = []; // { id, name, mime, data (base64), isImage, text? }
+  let largePaste = null; // 20KB 초과 붙여넣기 원본 텍스트
+  const ROOMS_STORE = 'gims_ai_rooms_v1';
+  let rooms = [];
+  let currentRoomId = null;
+  try { rooms = JSON.parse(localStorage.getItem(ROOMS_STORE) || '[]'); } catch (_) { rooms = []; }
+  if (!Array.isArray(rooms)) rooms = [];
+  if (!rooms.length) rooms = [{ id: makeId(), title: '새 대화', messages: [], updatedAt: Date.now() }];
+  currentRoomId = rooms[0].id;
+
+
+  let me = null, rev = 0, saveTimer = 0, rdirty = false, pollTimer = 0, authMode = 'login';
+  const deletedIds = new Set();
+  const storedModel = localStorage.getItem(MODEL_STORE);
+  if (storedModel && [...$('model').options].some(o => o.value === storedModel)) $('model').value = storedModel;
+  const toggleSettings = open => $('settings').classList.toggle('open', open);
+  async function api(method, url, data) {
+    const r = await fetch(url, { method, headers: data ? { 'Content-Type': 'application/json' } : {}, body: data && JSON.stringify(data) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw Object.assign(new Error(d?.error?.message || 'HTTP ' + r.status), { status: r.status });
+    return d;
+  }
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), 2600); }
+  function renderMe() {
+    document.body.classList.remove('loading');
+    const on = !!me?.user;
+    $('auth').style.display = on ? 'none' : 'grid';
+    if (!on) return;
+    const label = me.admin ? '관리자' : me.user;
+    $('userName').textContent = label;
+    $('userAva').textContent = (label[0] || 'G').toUpperCase();
+    $('userBadge').innerHTML = me.emailVerified ? '<span class="badge"><svg class="i"><use href="#i-check"/></svg>인증</span>' : '';
+    const left = Math.max(0, me.limit - me.used);
+    $('userQuota').textContent = me.admin ? '질문 무제한' : '오늘 ' + left + ' / ' + me.limit + '회 남음';
+    $('qbarWrap').style.display = me.admin ? 'none' : '';
+    $('qbar').style.width = me.admin || !me.limit ? '0' : Math.round(left / me.limit * 100) + '%';
+    $('keySec').style.display = me.admin ? '' : 'none';
+    $('adminToggle').style.display = me.admin ? '' : 'none';
+    $('mailWarn').style.display = me.mailReady === false && !me.emailVerified ? '' : 'none';
+    if (document.activeElement !== $('accEmail')) $('accEmail').value = me.email || '';
+    $('verifyBox').style.display = (me.email && !me.emailVerified) ? '' : 'none';
+    if (!cooling) $('reqVerify').disabled = !me.email || !!me.emailVerified || me.mailReady === false;
+    $('reqVerify').textContent = me.emailVerified ? '인증 완료' : '인증 코드 받기';
+    $('verifyNote').style.display = me.emailVerified ? 'none' : '';
+    if (me.emailVerified) setAccStatus('이메일 인증 완료 · 하루 질문 한도 +30회 적용 중', false, true);
+  }
+  let cooling = false;
+  function cooldown(sec) {
+    cooling = true; const b = $('reqVerify'); b.disabled = true;
+    const tick = () => { if (sec <= 0) { cooling = false; b.textContent = '코드 다시 받기'; b.disabled = !me.email || !!me.emailVerified; return; } b.textContent = '다시 받기 (' + sec-- + '초)'; setTimeout(tick, 1000); };
+    tick();
+  }
+  async function loadConfig() {
+    if (!me?.admin) return;
+    try {
+      const c = await api('GET', '/api/config');
+      $('apiKey').value = c.key || '';
+      setStatus(c.key ? '서버에 API 키가 저장되어 있습니다. 모든 기기가 이 키로 연결됩니다.' : 'API 키를 입력하고 저장하세요.');
+      $('keySec').open = !c.key;   // 키가 없을 때만 펼쳐서 안내
+    } catch (e) { setStatus(e.message, true); }
+  }
+  $('settingsToggle').addEventListener('click', () => { $('side').classList.remove('open'); toggleSettings(true); loadConfig(); });
+  $('closeSettings').addEventListener('click', () => toggleSettings(false));
+  $('settings').addEventListener('click', e => { if (e.target === $('settings')) toggleSettings(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') toggleSettings(false); });
+  $('saveKey').addEventListener('click', async () => {
+    const key = $('apiKey').value.trim();
+    if (!key) { setStatus('API 키를 입력하세요.', true); return; }
+    try { await api('PUT', '/api/config', { apiKey: key }); await loadConfig(); toggleSettings(false); }
+    catch (e) { setStatus('저장 실패: ' + e.message, true); }
+  });
+  $('forgetKey').addEventListener('click', async () => {
+    if (!confirm('서버에 저장된 API 키를 삭제할까요? 모든 기기에서 질문이 중단됩니다.')) return;
+    try { await api('DELETE', '/api/config'); await loadConfig(); } catch (e) { setStatus('삭제 실패: ' + e.message, true); }
+  });
+  // 계정 설정 (이메일 인증)
+  function setAccStatus(msg, err, ok) {
+    $('accStatus').textContent = msg || '';
+    $('accStatus').className = 'status' + (err ? ' error' : ok ? ' ok' : '');
+  }
+  $('saveEmail').addEventListener('click', async () => {
+    const email = $('accEmail').value.trim();
+    setAccStatus('저장 중…');
+    try {
+      const r = await api('PUT', '/api/account', { email });
+      me.email = r.email; me.emailVerified = r.emailVerified;
+      setAccStatus(email ? '이메일이 저장되었습니다. 이제 인증 코드를 받아 보세요.' : '이메일이 삭제되었습니다.', false, true);
+      renderMe();
+    } catch (e) { setAccStatus(e.message, true); }
+  });
+  $('reqVerify').addEventListener('click', async () => {
+    setAccStatus('인증 메일을 보내는 중…'); $('reqVerify').disabled = true;
+    try {
+      const r = await api('POST', '/api/verify/request');
+      $('verifyBox').style.display = ''; $('verifyCode').focus();
+      setAccStatus(r.message || '인증 코드를 이메일로 보냈습니다.', false, true);
+      toast('인증 메일을 보냈어요');
+      cooldown(r.cooldown || 60);
+    } catch (e) { setAccStatus(e.message, true); if (!cooling) $('reqVerify').disabled = false; }
+  });
+  $('verifyCode').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); });
+  $('verifyCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('confirmVerify').click(); });
+  $('confirmVerify').addEventListener('click', async () => {
+    const code = $('verifyCode').value.trim();
+    if (!code) { setAccStatus('인증 코드를 입력하세요.', true); return; }
+    setAccStatus('확인 중…');
+    try {
+      const r = await api('POST', '/api/verify/confirm', { code });
+      me.emailVerified = true;
+      if (r.limit) me.limit = r.limit;
+      toast('이메일 인증 완료! 질문 한도 +30회');
+      renderMe();
+    } catch (e) { setAccStatus(e.message, true); }
+  });
+  // 로그인 / 가입 / 로그아웃
+  $('authTabs').addEventListener('click', e => {
+    const b = e.target.closest('[data-mode]'); if (!b) return;
+    authMode = b.dataset.mode;
+    document.querySelectorAll('#authTabs button').forEach(x => x.classList.toggle('on', x === b));
+    $('authGo').textContent = authMode === 'login' ? '로그인' : '가입하고 시작';
+    $('authPass').autocomplete = authMode === 'login' ? 'current-password' : 'new-password';
+    $('authErr').textContent = '';
+  });
+  $('authForm').addEventListener('submit', async e => {
+    e.preventDefault(); $('authErr').textContent = ''; $('authGo').disabled = true;
+    try {
+      await api('POST', '/api/' + (authMode === 'login' ? 'login' : 'register'), { username: $('authUser').value.trim(), password: $('authPass').value });
+      $('authPass').value = ''; await boot();
+    } catch (err) { $('authErr').textContent = err.message; }
+    finally { $('authGo').disabled = false; }
+  });
+  $('logout').addEventListener('click', () => { api('POST', '/api/logout').catch(() => {}).finally(() => location.reload()); });
+  // 계정 데이터(채팅방) 서버 동기화
+  function applyRooms(list, forceLoad) {
+    const prevId = currentRoomId, prevLen = currentRoom()?.messages.length;
+    rooms = list.length ? list : [{ id: makeId(), title: '새 대화', messages: [], updatedAt: Date.now() }];
+    if (!rooms.some(r => r.id === prevId)) currentRoomId = rooms[0].id;
+    renderRoomList();
+    if (forceLoad || currentRoomId !== prevId || currentRoom().messages.length !== prevLen) loadRoom(currentRoomId);
+  }
+  async function pullRooms(first) {
+    const d = await api('GET', '/api/rooms?rev=' + (first ? -1 : rev));
+    if (d.same) return;
+    rev = d.rev; let list = d.rooms || [], migrated = false;
+    if (first && !list.length && !localStorage.getItem('gims_migrated')) {
+      try { const old = JSON.parse(localStorage.getItem(ROOMS_STORE) || '[]'); if (Array.isArray(old) && old.some(r => r.messages?.length)) { list = old; migrated = true; } } catch (_) {}
+    }
+    if (first) localStorage.setItem('gims_migrated', '1');
+    applyRooms(list, first);
+    if (migrated) saveRooms();
+  }
+  async function flushRooms() {
+    if (!me?.user) return;
+    const del = [...deletedIds]; rdirty = false;
+    try {
+      const d = await api('PUT', '/api/rooms', { rooms, deleted: del });
+      rev = d.rev; del.forEach(x => deletedIds.delete(x));
+      if (!busy && !rdirty) applyRooms(d.rooms);
+    } catch (e) { rdirty = true; if (e.status === 401) location.reload(); }
+  }
+  function startPolling() {
+    if (pollTimer) return;
+    pollTimer = setInterval(async () => {
+      if (busy || rdirty || document.hidden || !me?.user) return;
+      try { await pullRooms(false); } catch (e) { if (e.status === 401) location.reload(); }
+    }, 5000);
+  }
+  async function boot() {
+    try { me = await api('GET', '/api/me'); } catch (_) { me = { user: null }; }
+    renderMe();
+    if (!me.user) return;
+    try { await pullRooms(true); } catch (_) {}
+    if (me.admin) loadConfig();
+    startPolling();
+  }
+  $('model').addEventListener('change', () => {
+    localStorage.setItem(MODEL_STORE, $('model').value);
+    const r = currentRoom(); if (r) { r.model = $('model').value; saveRooms(); }   // 이미 열린 채팅에도 바로 적용
+    syncMode(); toast($('model').selectedOptions[0].textContent.split(' · ')[0] + ' 모드로 전환했어요');
+  });
+  $('newChat').addEventListener('click', createRoom);
+  $('createRoom').addEventListener('click', () => { createRoom(); $('side').classList.remove('open'); });
+  $('menu').addEventListener('click', () => $('side').classList.toggle('open'));
+  $('scrim').addEventListener('click', () => $('side').classList.remove('open'));
+  $('roomList').addEventListener('click', e => { if (e.target.closest('.room-name')) $('side').classList.remove('open'); });
+  $('prompt').addEventListener('input', () => $('send').classList.toggle('ready', !!$('prompt').value.trim() || attachments.length > 0));
+  $('chat').addEventListener('click', e => { const c = e.target.closest('.chip'); if (c && !busy) { $('prompt').value = c.dataset.p; sendMessage(); } });
+  function welcomeHTML() {
+    const chip = (ic, t, d, p) => '<button class="chip" data-p="' + p + '"><span class="ci"><svg class="i"><use href="#i-' + ic + '"/></svg></span>' + t + '<small>' + d + '</small></button>';
+    return '<div class="welcome" id="welcome"><div class="aura-wrap"><h1 class="aura-title">무엇이든 물어보세요</h1></div><p>코드, 글쓰기, 아이디어까지 편하게 대화해 보세요.</p><div class="chips">' +
+      chip('code', '웹페이지 만들기', 'HTML 하나로 뚝딱', '간단한 할 일 목록 웹페이지를 HTML 하나로 만들어줘') +
+      chip('book', '쉽게 설명하기', '초보자 눈높이로', 'API와 서버의 차이를 초보자에게 설명해줘') +
+      chip('mail', '이메일 초안', '정중하고 깔끔하게', '정중한 일정 변경 요청 이메일 초안을 써줘') + '</div></div>';
+  }
+  function stopReply() { stopped = true; abortCtl?.abort(); }
+  $('send').addEventListener('click', () => busy ? stopReply() : sendMessage());
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && busy && !$('settings').classList.contains('open')) stopReply(); });
+  $('prompt').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing) { e.preventDefault(); sendMessage(); }   // 그냥 Enter는 줄바꿈
+  });
+  $('prompt').addEventListener('input', () => {
+    const el = $('prompt'); el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 180) + 'px';
+    if (largePaste && el.value !== '/players의 텍스트') largePaste = null;
+  });
+  // Grok 스타일: 20KB 초과 텍스트 붙여넣기 시 짧은 라벨로 표시, 전송 시 원본 사용
+  $('prompt').addEventListener('paste', e => {
+    const clip = e.clipboardData || window.clipboardData;
+    if (!clip) return;
+    const txt = clip.getData('text/plain') || '';
+    if (txt.length <= 20 * 1024) return;
+    e.preventDefault();
+    largePaste = txt;
+    const el = $('prompt');
+    const start = el.selectionStart, end = el.selectionEnd;
+    const before = el.value.slice(0, start), after = el.value.slice(end);
+    const label = '/players의 텍스트';
+    el.value = before + label + after;
+    const pos = before.length + label.length;
+    el.setSelectionRange(pos, pos);
+    el.dispatchEvent(new Event('input'));
+    toast('큰 텍스트를 붙여넣었어요 (' + Math.round(txt.length / 1024) + 'KB)');
+  });
+
+
+  function makeId() { return 'room_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  function saveRooms() { rdirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(flushRooms, 500); }
+  function currentRoom() { return rooms.find(r => r.id === currentRoomId); }
+  function createRoom() {
+    if (busy) return;
+    const room = { id: makeId(), title: '새 대화', messages: [], updatedAt: Date.now() };
+    if ($('model').value) room.model = $('model').value;
+    rooms.unshift(room); currentRoomId = room.id; saveRooms(); renderRoomList(); loadRoom(room.id); $('prompt').focus();
+  }
+  function renderRoomList() {
+    const list = $('roomList'); list.innerHTML = '';
+    rooms.slice().sort((a,b) => b.updatedAt - a.updatedAt).forEach(room => {
+      const item = document.createElement('div');
+      item.className = 'room-item' + (room.id === currentRoomId ? ' active' : '');
+      const name = document.createElement('button'); name.className = 'room-name room-tool'; name.title = room.title; name.textContent = room.title || '새 대화';
+      name.addEventListener('click', () => { if (!busy) { currentRoomId = room.id; renderRoomList(); loadRoom(room.id); } });
+      const tools = document.createElement('div'); tools.className = 'room-tools';
+      const rename = document.createElement('button'); rename.className = 'room-tool'; rename.innerHTML = '<svg class="i"><use href="#i-edit"/></svg>'; rename.title = '이름 변경';
+      rename.addEventListener('click', e => { e.stopPropagation(); if (busy) return; const value = prompt('채팅방 이름을 입력하세요', room.title); if (value && value.trim()) { room.title = value.trim().slice(0,80); room.updatedAt = Date.now(); saveRooms(); renderRoomList(); } });
+      const remove = document.createElement('button'); remove.className = 'room-tool'; remove.innerHTML = '<svg class="i"><use href="#i-trash"/></svg>'; remove.title = '채팅방 삭제';
+      remove.addEventListener('click', e => { e.stopPropagation(); if (busy) return; if (!confirm('이 채팅방을 삭제할까요?')) return; deletedIds.add(room.id); rooms = rooms.filter(r => r.id !== room.id); if (!rooms.length) rooms = [{id:makeId(),title:'새 대화',messages:[],updatedAt:Date.now()}]; if (currentRoomId === room.id) currentRoomId = rooms[0].id; saveRooms(); renderRoomList(); loadRoom(currentRoomId); });
+      tools.append(rename, remove); item.append(name, tools); list.appendChild(item);
+    });
+  }
+  function loadRoom(id) {
+    const room = rooms.find(r => r.id === id); if (!room) return;
+    currentRoomId = id;
+    if (room.model && [...$('model').options].some(o => o.value === room.model)) $('model').value = room.model;
+    syncMode();
+    history = [];
+    $('chat').innerHTML = '';
+    if (!room.messages.length) {
+      $('chat').innerHTML = welcomeHTML();
+    } else {
+      room.messages.forEach(m => {
+        addMessage(m.role, m.text);
+        if (m.role === 'user') history.push({role:'user',parts:[{text:m.text}]});
+        else if (m.role === 'assistant') history.push({role:'model',parts:[{text:m.text}]});
+      });
+    }
+    $('chat').scrollTop = $('chat').scrollHeight;
+  }
+  function saveRoomMessage(role, text) {
+    const room = currentRoom(); if (!room) return;
+    room.messages.push({role, text});
+    room.updatedAt = Date.now();
+    if (role === 'user' && room.messages.length === 1 && room.title === '새 대화') room.title = text.slice(0, 32) || '새 대화';
+    saveRooms(); renderRoomList();
+  }
+
+  // Lightweight Markdown renderer: supports inline `code`, fenced ```code```,
+  // headings, lists, blockquotes, tables, bold and italic. HTML is escaped first.
+  function renderMarkdown(source) {
+    const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    const codeBlocks = [];
+    let src = source.replace(/\r\n?/g, '\n').replace(/```([^\n`]*)\n([\s\S]*?)```/g, (_, lang, code) => {
+      const label = lang.trim() || 'code';
+      const cleanCode = code.replace(/\n$/, '');
+      const html = '<div class="code-card"><div class="code-toolbar"><span>' + esc(label) + '</span><div class="code-actions"><button type="button" class="copy-code-btn">복사</button><button type="button" class="download-code-btn" data-lang="' + esc(label) + '">다운로드</button><button type="button" class="preview-code-btn" data-code-language="' + esc(label) + '"><svg class="i" viewBox="0 0 24 24" style="width:11px;height:11px;fill:currentColor;stroke:none"><path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5z"/></svg> 프리뷰에서 실행</button></div></div><pre><code data-language="' + esc(label) + '">' + esc(cleanCode) + '</code></pre></div>';
+      const token = '\u0000CODE' + codeBlocks.length + '\u0000';
+      codeBlocks.push(html); return token;
+    });
+    src = esc(src);
+    const inlineCode = [];
+    const inline = s => s
+      .replace(/``([^\n]+?)``/g, (_, code) => { const token = '\u0000INLINE' + inlineCode.length + '\u0000'; inlineCode.push(code); return token; })
+      .replace(/`([^`\n]+)`/g, (_, code) => { const token = '\u0000INLINE' + inlineCode.length + '\u0000'; inlineCode.push(code); return token; })
+      .replace(/\*\*([\s\S]+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/__([\s\S]+?)__/g, '<strong>$1</strong>')
+      .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>')
+      .replace(/(^|[^_])_([^_\n]+)_(?!_)/g, '$1<em>$2</em>');
+    const lines = src.split('\n');
+    const out = [];
+    let para = [], listType = null, listItems = [], quote = [];
+    const flushPara = () => { if (para.length) { out.push('<p>' + inline(para.join('\n')).replace(/\n/g, '<br>') + '</p>'); para = []; } };
+    const flushList = () => { if (listType) { out.push('<' + listType + '>' + listItems.map(x => '<li>' + inline(x) + '</li>').join('') + '</' + listType + '>'); listType = null; listItems = []; } };
+    const flushQuote = () => { if (quote.length) { out.push('<blockquote>' + quote.map(x => '<p>' + inline(x) + '</p>').join('') + '</blockquote>'); quote = []; } };
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const tokenMatch = line.match(/^\u0000CODE\d+\u0000$/);
+      const heading = line.match(/^(#{1,3})\s+(.+)$/);
+      const ul = line.match(/^\s*[-*+]\s+(.+)$/);
+      const ol = line.match(/^\s*\d+[.)]\s+(.+)$/);
+      const q = line.match(/^\s*&gt;\s?(.*)$/);
+      if (tokenMatch || heading || ul || ol || q || !line.trim()) {
+        flushPara();
+        if (!ul && !ol) flushList();
+        if (!q) flushQuote();
+        if (tokenMatch) out.push(line);
+        else if (heading) out.push('<h' + heading[1].length + '>' + inline(heading[2]) + '</h' + heading[1].length + '>');
+        else if (ul || ol) { const type = ul ? 'ul' : 'ol'; if (listType && listType !== type) flushList(); listType = type; listItems.push((ul || ol)[1]); }
+        else if (q) quote.push(q[1]);
+      } else { flushList(); flushQuote(); para.push(line); }
+    }
+    flushPara(); flushList(); flushQuote();
+    let result = out.join('');
+    result = result.replace(/\u0000INLINE(\d+)\u0000/g, (_, n) => {
+      const code = inlineCode[Number(n)] || '';
+      return '<span class="inline-code-wrap"><code>' + esc(code) + '</code><button type="button" class="inline-copy" title="코드 복사" aria-label="코드 복사">복사</button></span>';
+    });
+    result = result.replace(/\u0000CODE(\d+)\u0000/g, (_, n) => codeBlocks[Number(n)] || '');
+    return result;
+  }
+  // Copy code from fenced blocks and inline `code`.
+  $('chat').addEventListener('click', async e => {
+    const copyButton = e.target.closest('.copy-code-btn, .inline-copy');
+    if (copyButton) {
+      const card = copyButton.closest('.code-card');
+      const inlineWrap = copyButton.closest('.inline-code-wrap');
+      const code = card ? (card.querySelector('pre code')?.textContent || '') :
+        (inlineWrap?.querySelector('code')?.textContent || '');
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(code);
+        } else {
+          const temp = document.createElement('textarea');
+          temp.value = code; temp.style.position = 'fixed'; temp.style.opacity = '0';
+          document.body.appendChild(temp); temp.select();
+          const ok = document.execCommand('copy'); temp.remove();
+          if (!ok) throw new Error('copy failed');
+        }
+        const previous = copyButton.textContent;
+        copyButton.textContent = '복사됨 ✓';
+        setTimeout(() => { if (copyButton.isConnected) copyButton.textContent = previous; }, 1200);
+      } catch (_) {
+        copyButton.textContent = '복사 실패';
+      }
+      return;
+    }
+    const dlBtn = e.target.closest('.download-code-btn');
+    if (dlBtn) {
+      const card = dlBtn.closest('.code-card');
+      const code = card?.querySelector('pre code')?.textContent || '';
+      const lang = (dlBtn.dataset.lang || 'code').toLowerCase().replace(/[^a-z0-9+#.-]/g, '') || 'txt';
+      const extMap = { javascript: 'js', typescript: 'ts', python: 'py', markdown: 'md', html: 'html', css: 'css', json: 'json', text: 'txt', bash: 'sh', shell: 'sh', sql: 'sql', java: 'java', c: 'c', cpp: 'cpp', go: 'go', rust: 'rs', ruby: 'rb', php: 'php', xml: 'xml', yaml: 'yml', yml: 'yml' };
+      const ext = extMap[lang] || (lang.length <= 5 ? lang : 'txt');
+      const blob = new Blob([code], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'code.' + ext;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      const prev = dlBtn.textContent;
+      dlBtn.textContent = '저장됨 ✓';
+      setTimeout(() => { if (dlBtn.isConnected) dlBtn.textContent = prev; }, 1200);
+      return;
+    }
+    const button = e.target.closest('.preview-code-btn');
+    if (!button) return;
+    const code = button.closest('.code-card')?.querySelector('pre code')?.textContent || '';
+    const language = (button.dataset.codeLanguage || '').toLowerCase();
+    openPreview(code, language);
+  });
+  $('closePreview').addEventListener('click', () => $('previewPane').classList.remove('open'));
+  $('runPreview').addEventListener('click', () => { $('previewFrame').srcdoc = $('previewEditor').value; });
+  function openPreview(code, language) {
+    let html = code;
+    if (language === 'css') {
+      html = '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>' + code + '</style></head><body style="font:15px system-ui;padding:24px"><h2>CSS 프리뷰</h2><p>CSS를 HTML 문서에 적용한 결과입니다.</p><button>버튼 예시</button></body></html>';
+    } else if (['js','javascript'].includes(language)) {
+      html = '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font:15px system-ui;padding:20px"><h2>JavaScript 프리뷰</h2><div id="app"></div>' + '<scr' + 'ipt>\n' + code.replace(/<\x2fscript/gi, '<\\x2fscript') + '\n</scr' + 'ipt></body></html>';
+    } else if (!/<\s*(?:!doctype|html|head|body|main|div|section|article|button|style|script|h[1-6])\b/i.test(code)) {
+      html = '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font:15px system-ui;padding:20px">' + code + '</body></html>';
+    }
+    $('previewEditor').value = html;
+    $('previewPane').classList.add('open');
+    $('previewFrame').srcdoc = html;
+  }
+
+  function setStatus(message, error=false) {
+    $('keyStatus').textContent = message;
+    $('keyStatus').className = 'status' + (error ? ' error' : '');
+  }
+  function renderAttachments() {
+    const bar = $('attachBar');
+    bar.innerHTML = '';
+    bar.classList.toggle('has', attachments.length > 0);
+    for (const a of attachments) {
+      const chip = document.createElement('div');
+      chip.className = 'attach-chip';
+      if (a.isImage) {
+        const img = document.createElement('img');
+        img.src = 'data:' + a.mime + ';base64,' + a.data;
+        img.alt = a.name;
+        chip.appendChild(img);
+      } else {
+        const icon = document.createElement('span');
+        icon.innerHTML = '<svg class="i" viewBox="0 0 24 24"><path d="M20.2 11.6l-7.6 7.6a5 5 0 0 1-7.1-7.1l7.9-7.9a3.3 3.3 0 0 1 4.7 4.7l-7.9 7.9a1.7 1.7 0 0 1-2.4-2.4l7.2-7.2"/></svg>';
+        chip.appendChild(icon);
+      }
+      const name = document.createElement('span');
+      name.textContent = a.name;
+      name.title = a.name;
+      chip.appendChild(name);
+      const rm = document.createElement('button');
+      rm.className = 'rm'; rm.type = 'button'; rm.innerHTML = '<svg class="i" viewBox="0 0 24 24" style="width:13px;height:13px"><path d="M6 6l12 12M18 6L6 18"/></svg>'; rm.title = '제거';
+      rm.onclick = () => { attachments = attachments.filter(x => x.id !== a.id); renderAttachments(); };
+      chip.appendChild(rm);
+      bar.appendChild(chip);
+    }
+  }
+  function readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => {
+        const res = r.result;
+        const b64 = res.split(',')[1] || '';
+        resolve(b64);
+      };
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+  }
+  function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result || '');
+      r.onerror = reject;
+      r.readAsText(file);
+    });
+  }
+  async function addFiles(fileList, forceImage) {
+    for (const file of fileList) {
+      if (attachments.length >= 5) break;
+      const isImage = forceImage || /^image\//.test(file.type);
+      if (isImage) {
+        if (file.size > 8 * 1024 * 1024) { alert(file.name + ' 이 너무 큽니다 (최대 8MB).'); continue; }
+        const data = await readFileAsBase64(file);
+        attachments.push({ id: Math.random().toString(36).slice(2), name: file.name, mime: file.type || 'image/jpeg', data, isImage: true });
+      } else {
+        if (file.size > 1 * 1024 * 1024) { alert(file.name + ' 이 너무 큽니다 (텍스트 파일 최대 1MB).'); continue; }
+        const text = await readFileAsText(file);
+        attachments.push({ id: Math.random().toString(36).slice(2), name: file.name, mime: file.type || 'text/plain', data: '', isImage: false, text });
+      }
+    }
+    renderAttachments();
+    $('send').classList.toggle('ready', !!$('prompt').value.trim() || attachments.length > 0);
+  }
+  $('photoInput').addEventListener('change', async e => {
+    await addFiles(e.target.files, true);
+    e.target.value = '';
+  });
+  $('fileInput').addEventListener('change', async e => {
+    await addFiles(e.target.files, false);
+    e.target.value = '';
+  });
+  function addMessage(role, text, id) {
+    const welcome = $('welcome'); if (welcome) welcome.remove();
+    const row = document.createElement('div');
+    row.className = 'msg ' + (role === 'user' ? 'user' : 'assistant');
+    if (id) row.id = id;
+    const avatar = document.createElement('div'); avatar.className = 'avatar'; if (role !== 'user') avatar.innerHTML = '<svg class="i"><use href="#i-spark"/></svg>';
+    const bubble = document.createElement('div'); bubble.className = 'bubble'; if (role === 'assistant') bubble.innerHTML = renderMarkdown(text); else bubble.textContent = text;
+    row.append(avatar, bubble); $('chat').appendChild(row); $('chat').scrollTop = $('chat').scrollHeight;
+    return bubble;
+  }
+  async function sendMessage() {
+    if (busy) return;
+    let text = $('prompt').value.trim();
+    if (!text && !attachments.length) return;
+    const roomForRequest = currentRoom();
+    if (!me?.user) return;
+    const modelKey = $('model').value, model = MODELS[modelKey] || MODELS.flash;
+    if (roomForRequest) roomForRequest.model = modelKey;
+    localStorage.setItem(MODEL_STORE, modelKey);
+    // 대용량 붙여넣기: 화면에는 라벨, 실제 전송은 원본
+    let sendText = text;
+    if (largePaste && text.includes('/players의 텍스트')) {
+      sendText = text.split('/players의 텍스트').join(largePaste);
+    }
+    largePaste = null;
+    $('prompt').value = ''; $('prompt').style.height = 'auto'; $('send').classList.remove('ready');
+    // 첨부 파일 설명 포함 표시용 텍스트
+    let displayText = text;
+    if (attachments.length) {
+      const names = attachments.map(a => a.isImage ? '[사진] ' + a.name : '[파일] ' + a.name).join(', ');
+      displayText = (text ? text + '\n' : '') + names;
+    }
+    addMessage('user', displayText);
+    saveRoomMessage('user', displayText);
+    // multimodal parts 구성
+    const parts = [];
+    let promptText = sendText || '';
+    for (const a of attachments) {
+      if (a.isImage) {
+        parts.push({ inlineData: { mimeType: a.mime, data: a.data } });
+      } else if (a.text) {
+        promptText += (promptText ? '\n\n' : '') + '--- 파일: ' + a.name + ' ---\n' + a.text;
+      }
+    }
+    if (promptText) parts.unshift({ text: promptText });
+    if (!parts.length) parts.push({ text: '(첨부만)' });
+    history.push({ role: 'user', parts });
+    const sentAttachments = attachments.slice();
+    attachments = [];
+    renderAttachments();
+    busy = true; stopped = false; abortCtl = new AbortController();
+    $('send').classList.add('busy'); $('send').setAttribute('aria-label', '답장 중지');
+    const answerBubble = addMessage('assistant', '');
+    answerBubble.innerHTML = '<p class="slow">생각 중…</p>';
+    let answer = '', raf = 0;
+    const startTime = new Date();
+    const slowTimer = setTimeout(() => { if (!answer) answerBubble.innerHTML = '<p class="slow">생각 중… <b>답장이 느립니다.</b> 조금 더 기다리거나 ■ 버튼으로 중지하세요.</p>'; }, 4000);
+    try {
+      // history에서 최근 메시지의 큰 base64는 유지하되, 서버로 보낼 때는 그대로 전달 (Gemini 지원)
+      const post = nt => fetch('/api/chat', { method: 'POST', signal: abortCtl.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, contents: buildContents(modelKey), temperature: Number($('temperature').value), noThink: nt }) });
+      const fast = /flash/.test(model) && !noThink.has(model);
+      let response = await post(fast);
+      if (!response.ok && fast && response.status === 400) { noThink.add(model); response = await post(false); }
+      if (response.status === 401) { location.reload(); return; }
+      const usedHdr = response.headers.get('X-Used');
+      if (usedHdr !== null && me && !me.admin) { me.used = Number(usedHdr); renderMe(); }
+      if (!response.ok) {
+        let detail = `HTTP ${response.status}`;
+        try { const errData = await response.json(); detail = errData?.error?.message || detail; } catch (_) {}
+        throw new Error(detail);
+      }
+      if (!response.body) throw new Error('이 브라우저에서 스트리밍 응답을 읽을 수 없습니다. 최신 Chrome 또는 Edge를 사용하세요.');
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      const appendChunk = (chunk) => {
+        const parts = chunk?.candidates?.flatMap(c => c.content?.parts || []) || [];
+        const piece = parts.map(p => p.text || '').join('');
+        if (piece) {
+          answer += piece;
+          if (!raf) raf = requestAnimationFrame(() => { raf = 0; answerBubble.innerHTML = renderMarkdown(answer); $('chat').scrollTop = $('chat').scrollHeight; });
+        }
+      };
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue;
+          const payload = line.slice(5).trim();
+          if (!payload || payload === '[DONE]') continue;
+          try { appendChunk(JSON.parse(payload)); } catch (_) { /* Ignore partial or non-JSON SSE lines. */ }
+        }
+        if (done) break;
+      }
+      if (buffer.startsWith('data:')) {
+        const payload = buffer.slice(5).trim();
+        if (payload && payload !== '[DONE]') {
+          try { appendChunk(JSON.parse(payload)); } catch (_) {}
+        }
+      }
+      cancelAnimationFrame(raf); answer = answer.trim();
+      if (!answer) throw new Error('응답 텍스트가 없습니다. 모델명, API 할당량 또는 안전 필터 상태를 확인하세요.');
+      const endTime = new Date();
+      const fmt = d => d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const durationSec = ((endTime - startTime) / 1000).toFixed(1);
+      answerBubble.innerHTML = renderMarkdown(answer) +
+        '<div class="answer-meta"><span>시작 ' + fmt(startTime) + ' · 종료 ' + fmt(endTime) + ' · ' + durationSec + '초</span>' +
+        '<button type="button" class="copy-all-btn">답변 전체 복사</button></div>';
+      answerBubble.querySelector('.copy-all-btn').addEventListener('click', async function() {
+        try {
+          if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(answer);
+          else { const t = document.createElement('textarea'); t.value = answer; t.style.position = 'fixed'; t.style.opacity = '0'; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+          this.textContent = '복사됨 ✓';
+          setTimeout(() => { if (this.isConnected) this.textContent = '답변 전체 복사'; }, 1200);
+        } catch (_) { this.textContent = '복사 실패'; }
+      });
+      saveRoomMessage('assistant', answer);
+      history.push({ role: 'model', parts: [{ text: answer }] });
+      $('chat').scrollTop = $('chat').scrollHeight;
+    } catch (err) {
+      cancelAnimationFrame(raf);
+      const part = answer.trim();
+      if (stopped && part) {
+        const endTime = new Date();
+        const fmt = d => d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const durationSec = ((endTime - startTime) / 1000).toFixed(1);
+        answerBubble.innerHTML = renderMarkdown(part) +
+          '<p class="slow" style="animation:none;margin-top:8px">■ 답장을 중지했습니다</p>' +
+          '<div class="answer-meta"><span>시작 ' + fmt(startTime) + ' · 종료 ' + fmt(endTime) + ' · ' + durationSec + '초</span>' +
+          '<button type="button" class="copy-all-btn">답변 전체 복사</button></div>';
+        answerBubble.querySelector('.copy-all-btn').addEventListener('click', async function() {
+          try {
+            if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(part);
+            else { const t = document.createElement('textarea'); t.value = part; t.style.position = 'fixed'; t.style.opacity = '0'; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+            this.textContent = '복사됨 ✓';
+            setTimeout(() => { if (this.isConnected) this.textContent = '답변 전체 복사'; }, 1200);
+          } catch (_) { this.textContent = '복사 실패'; }
+        });
+        saveRoomMessage('assistant', part);
+        history.push({ role: 'model', parts: [{ text: part }] });
+        return;
+      }
+      if (stopped) {
+        answerBubble.innerHTML = '<p class="slow" style="animation:none">■ 답장을 중지했습니다</p>';
+        $('prompt').value = text; $('send').classList.add('ready');
+      } else {
+        answerBubble.textContent = '요청 실패: ' + (err.message || String(err));
+        answerBubble.parentElement.querySelector('.avatar').innerHTML = '!';
+        answerBubble.parentElement.querySelector('.avatar').style.color = '#ffaaa7';
+      }
+      // Remove the unanswered user turn from API history so a retry doesn't duplicate it.
+      history.pop();
+      const room = currentRoom();
+      if (room && room.messages.length && room.messages[room.messages.length - 1].role === 'user' && room.messages[room.messages.length - 1].text === text) { room.messages.pop(); saveRooms(); renderRoomList(); }
+    } finally {
+      clearTimeout(slowTimer); abortCtl = null; busy = false; $('send').classList.remove('busy'); $('send').setAttribute('aria-label', '전송'); $('prompt').focus();
+    }
+  }
+
+  // ---------- 관리자 패널 ----------
+  let adminOffset = 0, adminTotal = 0, adminSeed = '', adminQ = '', adminLoading = false;
+  const toggleAdmin = open => {
+    $('adminPanel').classList.toggle('open', open);
+    if (open) { adminOffset = 0; adminSeed = String(Date.now()); loadAdminUsers(true); }
+  };
+  $('adminToggle').addEventListener('click', () => { $('side').classList.remove('open'); toggleSettings(false); toggleAdmin(true); });
+  $('closeAdmin').addEventListener('click', () => toggleAdmin(false));
+  $('adminPanel').addEventListener('click', e => { if (e.target === $('adminPanel')) toggleAdmin(false); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && $('adminPanel').classList.contains('open')) toggleAdmin(false);
+  });
+  let searchTimer = 0;
+  $('adminSearch').addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      adminQ = $('adminSearch').value.trim();
+      adminOffset = 0;
+      adminSeed = String(Date.now());
+      loadAdminUsers(true);
+    }, 300);
+  });
+  $('adminRefresh').addEventListener('click', () => {
+    adminOffset = 0; adminSeed = String(Date.now()); loadAdminUsers(true);
+  });
+  $('adminMore').addEventListener('click', () => {
+    if (adminLoading || adminOffset + 100 >= adminTotal) return;
+    adminOffset += 100;
+    loadAdminUsers(false);
+  });
+  async function loadAdminUsers(reset) {
+    if (adminLoading) return;
+    adminLoading = true;
+    if (reset) {
+      $('adminList').innerHTML = '';
+      $('adminMeta').textContent = '불러오는 중…';
+      $('adminMore').style.display = 'none';
+    }
+    try {
+      const qs = new URLSearchParams({ offset: String(adminOffset), limit: '100' });
+      if (adminQ) qs.set('q', adminQ);
+      const d = await api('GET', '/api/admin/users?' + qs);
+      adminTotal = d.total || 0;
+      const list = d.users || [];
+      if (reset && !list.length) {
+        $('adminList').innerHTML = '<div class="admin-empty">사용자가 없습니다.</div>';
+      } else {
+        for (const u of list) appendAdminUser(u);
+      }
+      const shown = Math.min(adminOffset + list.length, adminTotal);
+      $('adminMeta').textContent = adminQ
+        ? '검색 결과 ' + adminTotal + '명 · ' + shown + '명 표시'
+        : '전체 ' + adminTotal + '명 · ' + shown + '명 표시';
+      // 100명 초과일 때만 더보기, 이하이면 전부 표시됨
+      $('adminMore').style.display = shown < adminTotal ? '' : 'none';
+    } catch (e) {
+      $('adminMeta').textContent = '오류: ' + e.message;
+      toast(e.message);
+    } finally { adminLoading = false; }
+  }
+  function appendAdminUser(u) {
+    const row = document.createElement('div');
+    row.className = 'admin-user' + (u.banned ? ' banned' : '');
+    row.dataset.user = u.username;
+    const limLabel = u.dailyLimit != null ? u.dailyLimit : '기본(' + u.effectiveLimit + ')';
+    row.innerHTML =
+      '<span class="au-name">' + escHtml(u.username) + (u.banned ? ' <span class="ban-tag">밴</span>' : '') + '</span>' +
+      '<span class="au-email" title="' + escHtml(u.email || '') + '">' + escHtml(u.email || '(이메일 없음)') + '</span>' +
+      '<span class="au-stats">오늘 ' + u.used + ' / ' + limLabel + '회</span>' +
+      '<div class="au-actions">' +
+        '<input type="number" min="0" max="100000" placeholder="한도" value="' + (u.dailyLimit != null ? u.dailyLimit : '') + '" data-act="limit" title="일일 한도 (비우면 기본)">' +
+        '<button type="button" class="ghost" data-act="saveLimit">한도 저장</button>' +
+        '<button type="button" class="ghost" data-act="resetLimit">기본 한도</button>' +
+        '<button type="button" class="' + (u.banned ? 'primary' : 'ghost') + '" data-act="ban">' + (u.banned ? '밴 해제' : '밴') + '</button>' +
+      '</div>';
+    $('adminList').appendChild(row);
+  }
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  $('adminList').addEventListener('click', async e => {
+    const btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    const row = btn.closest('.admin-user');
+    if (!row) return;
+    const username = row.dataset.user;
+    const act = btn.dataset.act;
+    try {
+      if (act === 'saveLimit') {
+        const inp = row.querySelector('input[data-act=limit]');
+        const v = inp.value.trim();
+        const body = { username, dailyLimit: v === '' ? null : Number(v) };
+        const r = await api('PUT', '/api/admin/users', body);
+        toast(username + ' 한도 저장됨');
+        updateAdminRow(row, r);
+      } else if (act === 'resetLimit') {
+        const r = await api('PUT', '/api/admin/users', { username, dailyLimit: null });
+        toast(username + ' 기본 한도로 복원');
+        updateAdminRow(row, r);
+      } else if (act === 'ban') {
+        const willBan = !row.classList.contains('banned');
+        if (willBan && !confirm(username + ' 님을 밴할까요?')) return;
+        const r = await api('PUT', '/api/admin/users', { username, banned: willBan });
+        toast(willBan ? username + ' 밴됨' : username + ' 밴 해제됨');
+        updateAdminRow(row, r);
+      }
+    } catch (err) { toast(err.message); }
+  });
+  function updateAdminRow(row, u) {
+    row.classList.toggle('banned', !!u.banned);
+    const nameEl = row.querySelector('.au-name');
+    nameEl.innerHTML = escHtml(u.username) + (u.banned ? ' <span class="ban-tag">밴</span>' : '');
+    const limLabel = u.dailyLimit != null ? u.dailyLimit : '기본(' + u.effectiveLimit + ')';
+    row.querySelector('.au-stats').textContent = '오늘 ' + u.used + ' / ' + limLabel + '회';
+    const inp = row.querySelector('input[data-act=limit]');
+    if (inp) inp.value = u.dailyLimit != null ? u.dailyLimit : '';
+    const banBtn = row.querySelector('[data-act=ban]');
+    if (banBtn) {
+      banBtn.textContent = u.banned ? '밴 해제' : '밴';
+      banBtn.className = u.banned ? 'primary' : 'ghost';
+    }
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
