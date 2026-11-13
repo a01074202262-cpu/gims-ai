@@ -2,12 +2,17 @@
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
 const { Readable } = require('stream');
 const block = require('./block');
+const dbmod = require('./db');
+const reasoning = require('./reasoning');
 
 const PORT = process.env.PORT || 3000;
-const ADMIN_IPS = (process.env.ADMIN_IPS || '211.233.75.204').split(',').map(s => s.trim()).filter(Boolean); // 관리자(화이트리스트) IP
+const ADMIN_IPS = (process.env.ADMIN_IPS || '').split(',').map(s => s.trim()).filter(Boolean); // 관리자(화이트리스트) IP
 const DAILY_LIMIT = Number(process.env.DAILY_LIMIT) || 20;      // 관리자 외 기본 하루 질문 수 (한국시간 자정 초기화)
 const VERIFY_BONUS = 30;                                         // 이메일 인증 시 추가 한도
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';            // nginx / Render 등 프록시 뒤에서만 1
+// Gemini API 키 우선순위: ① 관리자 화면에서 등록(DB) → ② 환경변수 GEMINI_API_KEY → ③ package.json 의 config.geminiApiKey
+let pkgCfg = {}; try { pkgCfg = require('./package.json').config || {}; } catch {}
+const envKey = () => String(process.env.GEMINI_API_KEY || process.env.npm_package_config_geminiApiKey || pkgCfg.geminiApiKey || '').trim();
 const BASE = process.env.GEMINI_BASE || 'https://generativelanguage.googleapis.com';
 // 데이터 경로: DATA_DIR 환경변수 (영구 디스크 마운트 경로) 또는 server.js 옆 data/
 // Free 플랜: /var/data 는 권한 없음 → DATA_DIR 비우거나 앱 디렉터리 하위 사용
@@ -33,24 +38,28 @@ const DATA = resolveDataDir();
 const ROOMS = path.join(DATA, 'rooms');
 console.log('[data] 저장 경로:', DATA);
 
-// ---------- 저장소 (메모리 + 파일) ----------
-const rd = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
-const wr = (f, o) => { const t = f + '.tmp'; fs.writeFileSync(t, JSON.stringify(o), { mode: 0o600 }); fs.renameSync(t, f); };
-const F = { cfg: path.join(DATA, 'config.json'), users: path.join(DATA, 'users.json'), sess: path.join(DATA, 'sessions.json'), use: path.join(DATA, 'usage.json') };
-const cfg = rd(F.cfg, {}), users = rd(F.users, {}), sess = rd(F.sess, {});
-let usage = rd(F.use, { day: '', n: {} });
+// ---------- 저장소 (메모리 캐시 + MongoDB 또는 JSON 파일) ----------
+// MONGODB_URI 환경변수가 있으면 MongoDB 에 API 키·사용자·세션·사용량·채팅방을 모두 저장
+let db;
+const cfg = {}, users = {}, sess = {};
+let usage = { day: '', n: {} };
+const saveCfg = () => db.save('cfg', cfg), saveUsers = () => db.save('users', users), saveSess = () => db.save('sessions', sess), saveUse = () => db.save('usage', usage);
 const today = () => new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
 const cnt = k => { if (usage.day !== today()) usage = { day: today(), n: {} }; return usage.n[k] || 0; };
-const bump = (k, d) => { cnt(k); usage.n[k] = Math.max(0, (usage.n[k] || 0) + d); wr(F.use, usage); };
+const bump = (k, d) => { cnt(k); usage.n[k] = Math.max(0, (usage.n[k] || 0) + d); saveUse(); };
 
-// ---------- 관리자 계정 자동 생성 (admin / A20140205G) ----------
+// ---------- 관리자 계정 ----------
+// ADMIN_PASS 환경변수를 주면 매 시작 때 그 값으로 설정(비밀번호 교체용). 없고 계정도 없으면 임의 비밀번호를 만들어 콘솔에 1회 출력.
 const ADMIN_USER = 'admin';
-const ADMIN_PASS = 'A20140205G';
-if (!users[ADMIN_USER]) {
+const getKey = () => cfg.apiKey || envKey();
+function ensureAdmin() {
+  const env = process.env.ADMIN_PASS;
+  if (users[ADMIN_USER] && !env) return;
+  const pass = env || crypto.randomBytes(9).toString('base64url');
   const salt = crypto.randomBytes(16).toString('hex');
-  users[ADMIN_USER] = { salt, hash: crypto.scryptSync(ADMIN_PASS, salt, 64).toString('hex'), isAdmin: true, email: '', emailVerified: true };
-  wr(F.users, users);
-  console.log('관리자 계정이 생성되었습니다: admin / A20140205G');
+  users[ADMIN_USER] = { salt, hash: crypto.scryptSync(pass, salt, 64).toString('hex'), isAdmin: true, email: '', emailVerified: true };
+  saveUsers();
+  console.log(env ? '관리자(admin) 비밀번호를 ADMIN_PASS 값으로 설정했습니다.' : `관리자 계정이 생성되었습니다: admin / ${pass}  (지금만 표시됩니다. 저장하세요)`);
 }
 
 // ---------- 시스템 프롬프트 (Gims AI 세뇌) ----------
@@ -103,7 +112,7 @@ const readBody = async (req, res, opts) => {
 };
 
 
-http.createServer(async (req, res) => {
+const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x'), p = url.pathname, m = req.method;
   try {
     block.securityHeaders(res);
@@ -129,7 +138,8 @@ http.createServer(async (req, res) => {
         admin: a.admin,
         limit: lim === Infinity ? 0 : lim,
         used: usedOf(a, req),
-        hasKey: !!cfg.apiKey,
+        hasKey: !!getKey(),
+        reason: reasoning.info(),
         email: u.email || '',
         emailVerified: !!u.emailVerified
       });
@@ -146,7 +156,7 @@ http.createServer(async (req, res) => {
         if (name === 'admin' || name === '관리자' || users[name]) return fail(res, 409, '이미 사용 중인 아이디입니다.');
         if (cnt('reg:' + I) >= 10) return fail(res, 429, '오늘 가입 가능 횟수를 초과했습니다.');
         const salt = crypto.randomBytes(16).toString('hex');
-        users[name] = { salt, hash: hashPw(password, salt), email: '', emailVerified: false }; wr(F.users, users); bump('reg:' + I, 1);
+        users[name] = { salt, hash: hashPw(password, salt), email: '', emailVerified: false }; saveUsers(); bump('reg:' + I, 1);
       } else {
         const u = users[name], ok = u && crypto.timingSafeEqual(Buffer.from(hashPw(password, u.salt), 'hex'), Buffer.from(u.hash, 'hex'));
         if (!ok) { f.n++; return fail(res, 401, '아이디 또는 비밀번호가 올바르지 않습니다.'); }
@@ -154,12 +164,12 @@ http.createServer(async (req, res) => {
       }
       const tok = crypto.randomBytes(32).toString('hex');
       for (const k of Object.keys(sess)) if (sess[k].exp < Date.now()) delete sess[k];
-      sess[sha(tok)] = { user: name, exp: Date.now() + 30 * 864e5 }; wr(F.sess, sess);
+      sess[sha(tok)] = { user: name, exp: Date.now() + 30 * 864e5 }; saveSess();
       const secure = req.socket.encrypted || (TRUST_PROXY && req.headers['x-forwarded-proto'] === 'https') ? '; Secure' : '';
       return send(res, 200, { ok: true }, { 'Set-Cookie': `sid=${tok}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${30 * 86400}${secure}` });
     }
     if (p === '/api/logout' && m === 'POST') {
-      const t = cookie(req).sid; if (t) { delete sess[sha(t)]; wr(F.sess, sess); }
+      const t = cookie(req).sid; if (t) { delete sess[sha(t)]; saveSess(); }
       return send(res, 200, { ok: true }, { 'Set-Cookie': 'sid=; HttpOnly; Path=/; Max-Age=0' });
     }
     if (!a) return fail(res, 401, '로그인이 필요합니다.');
@@ -182,7 +192,7 @@ http.createServer(async (req, res) => {
         delete users[a.user].verifyCode;
         delete users[a.user].verifyExp;
       }
-      wr(F.users, users);
+      saveUsers();
       return send(res, 200, { ok: true, email: em, emailVerified: !!users[a.user].emailVerified });
     }
     if (p === '/api/verify/request' && m === 'POST') {
@@ -193,7 +203,7 @@ http.createServer(async (req, res) => {
       const code = String(Math.floor(100000 + Math.random() * 900000));
       u.verifyCode = sha(code);
       u.verifyExp = Date.now() + 15 * 60 * 1000; // 15분
-      wr(F.users, users);
+      saveUsers();
       // 실제 이메일 발송 기능 없음 (의존성 없음). 서버 콘솔에 출력 + 응답에 포함(데모용)
       console.log(`[이메일 인증] 사용자=${a.user} 이메일=${u.email} 코드=${code}`);
       return send(res, 200, {
@@ -213,21 +223,21 @@ http.createServer(async (req, res) => {
       u.emailVerified = true;
       delete u.verifyCode;
       delete u.verifyExp;
-      wr(F.users, users);
+      saveUsers();
       return send(res, 200, { ok: true, emailVerified: true, limit: limitOf(a) });
     }
 
     // ----- 관리자 전용 API 키 -----
     if (p === '/api/config') {
-      if (m === 'GET') return send(res, 200, a.admin ? { hasKey: !!cfg.apiKey, key: cfg.apiKey || '' } : { hasKey: !!cfg.apiKey });
+      if (m === 'GET') return send(res, 200, a.admin ? { hasKey: !!getKey(), key: cfg.apiKey || '', source: cfg.apiKey ? 'admin' : (envKey() ? 'env/package.json' : '') } : { hasKey: !!getKey() });
       if (!a.admin) return fail(res, 403, 'API 키는 관리자만 변경할 수 있습니다.');
       if (m === 'PUT') {
         const _b = await readBody(req, res); if (!_b) return;
         const { apiKey } = _b;
         if (typeof apiKey !== 'string' || !/^\S{20,}$/.test(apiKey.trim())) return fail(res, 400, '올바른 API 키 형식이 아닙니다.');
-        cfg.apiKey = apiKey.trim(); wr(F.cfg, cfg); return send(res, 200, { ok: true });
+        cfg.apiKey = apiKey.trim(); saveCfg(); return send(res, 200, { ok: true });
       }
-      if (m === 'DELETE') { cfg.apiKey = ''; wr(F.cfg, cfg); return send(res, 200, { ok: true }); }
+      if (m === 'DELETE') { cfg.apiKey = ''; saveCfg(); return send(res, 200, { ok: true }); }
     }
 
     // ----- 관리자: 사용자 목록 / 한도·밴 제어 -----
@@ -284,10 +294,10 @@ http.createServer(async (req, res) => {
           for (const k of Object.keys(sess)) {
             if (sess[k].user === name) delete sess[k];
           }
-          wr(F.sess, sess);
+          saveSess();
         }
       }
-      wr(F.users, users);
+      saveUsers();
       const u = users[name];
       const custom = typeof u.dailyLimit === 'number' && u.dailyLimit >= 0;
       return send(res, 200, {
@@ -303,7 +313,7 @@ http.createServer(async (req, res) => {
 
     // ----- 계정별 채팅방 (기기 간 공유) -----
     if (p === '/api/rooms') {
-      const file = path.join(ROOMS, a.user + '.json'), d = rd(file, { rev: 0, rooms: [], tomb: {} });
+      const d = await db.getRoom(a.user);
       if (m === 'GET') return url.searchParams.get('rev') === String(d.rev) ? send(res, 200, { rev: d.rev, same: true }) : send(res, 200, { rev: d.rev, rooms: d.rooms });
       if (m === 'PUT') {
         const _b = await readBody(req, res); if (!_b) return;
@@ -316,38 +326,83 @@ http.createServer(async (req, res) => {
           const old = map.get(r.id); if (!old || (r.updatedAt || 0) >= (old.updatedAt || 0)) map.set(r.id, r);
         }
         d.rooms = [...map.values()].sort((x, y) => (y.updatedAt || 0) - (x.updatedAt || 0)); d.rev++;
-        wr(file, d); return send(res, 200, { rev: d.rev, rooms: d.rooms });
+        await db.setRoom(a.user, d); return send(res, 200, { rev: d.rev, rooms: d.rooms });
       }
     }
 
     // ----- 채팅 (모든 기기가 관리자가 등록한 키를 사용) -----
     if (p === '/api/chat' && m === 'POST') {
-      if (!cfg.apiKey) return fail(res, 503, '관리자가 아직 API 키를 등록하지 않았습니다.');
+      const apiKey = getKey();
+      if (!apiKey) return fail(res, 503, '관리자가 아직 API 키를 등록하지 않았습니다.');
       const u = users[a.user];
       if (u && u.banned) return fail(res, 403, '차단된 계정입니다.');
       const used = usedOf(a, req), lim = limitOf(a), H = n => ({ 'X-Used': String(n), 'X-Limit': String(lim === Infinity ? 0 : lim) });
       if (!a.admin && used >= lim) return fail(res, 429, `오늘 질문 한도(${lim}회)를 모두 사용했습니다. 내일 다시 이용해 주세요.`, H(used));
       // 채팅 본문은 SQL/XSS 키워드가 정상 질문일 수 있음 → 프로토타입 오염·크기만 검사
       const _b = await readBody(req, res, { types: ['proto'] }); if (!_b) return;
-      const { model, contents, temperature, noThink } = _b;
+      const { model, contents, temperature, noThink, reason } = _b;
       if (!/^[\w.\-]+$/.test(model || '') || !Array.isArray(contents) || !contents.length || contents.length > 60) return fail(res, 400, '잘못된 요청입니다.');
+      // 추론 설정: reason = { level: 'low'|'medium'|'high'|'max' } — 비용은 서버 표(reasoning.LEVELS)가 결정
+      const lv = reason && typeof reason === 'object' && typeof reason.level === 'string' && Object.hasOwn(reasoning.LEVELS, reason.level) ? reasoning.LEVELS[reason.level] : null;
+      const cost = lv ? lv.cost : 1;
+      if (!a.admin && used + cost > lim) return fail(res, 429, `이 추론 정도는 질문 ${cost}회분이 차감됩니다. 오늘 남은 한도가 부족해요. (${lim - used}회 남음)`, H(used));
       const gen = { temperature: Math.min(2, Math.max(0, Number(temperature) || 0.7)) };
-      if (noThink) gen.thinkingConfig = { thinkingBudget: 0 };
-      if (!a.admin) { bump('u:' + a.user, 1); bump('ip:' + ip(req), 1); }
-      const refund = () => { if (!a.admin) { bump('u:' + a.user, -1); bump('ip:' + ip(req), -1); } };
+      if (noThink && !lv) gen.thinkingConfig = { thinkingBudget: 0 };
+      if (!a.admin) { bump('u:' + a.user, cost); bump('ip:' + ip(req), cost); }
+      const refund = (n = cost) => { if (!a.admin) { bump('u:' + a.user, -n); bump('ip:' + ip(req), -n); } };
       const ac = new AbortController(); res.on('close', () => ac.abort());
+
+      // 추론 모드는 단계 진행 상황을 먼저 흘려보내야 하므로 SSE 헤더를 미리 연다
+      const early = !!lv;
+      const emit = o => { if (!res.writableEnded) res.write('data: ' + JSON.stringify(o) + '\n\n'); };
+      const openSSE = () => { res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', ...H(usedOf(a, req)) }); res.flushHeaders(); };
+      if (early) openSSE();
+
+      let sendContents = contents, sysInst = SYSTEM_INSTRUCTION;
+      if (lv) {   // DeepSeek-R1 방식: 분석 → 풀이 N개 → 검증 → 수정 → (아래에서) 최종 답 스트리밍
+        try {
+          const r = await reasoning.prepare({ base: BASE, key: apiKey, model, contents, level: lv, signal: ac.signal, onStep: g => emit({ gims: g }) });
+          sendContents = r.contents; sysInst = { parts: [...SYSTEM_INSTRUCTION.parts, { text: r.system }] };
+          console.log('[reason]', a.user, reason.level, JSON.stringify(r.stats));
+        } catch (e) {
+          if (ac.signal.aborted && res.destroyed) { refund(); return res.end(); }
+          console.warn('[reason] 실패 → 일반 응답으로 대체:', e.message);
+          refund(cost - 1);
+          emit({ gims: { id: 'fallback', label: '추론 실패 → 일반 답변으로 진행', state: 'done', ms: 0, detail: String(e.message || '').slice(0, 80), used: usedOf(a, req) } });
+        }
+        emit({ gims: { id: 'final', label: '최종 답 작성', state: 'start' } });
+      }
+
+      const bail = (code, msg, raw) => {
+        refund();
+        if (early) { emit({ gims: { used: usedOf(a, req) } }); emit({ error: { message: msg } }); return res.end(); }
+        if (raw !== undefined) { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', ...H(usedOf(a, req)) }); return res.end(raw); }
+        return fail(res, code, msg, H(usedOf(a, req)));
+      };
       let up;
       try {
         up = await fetch(`${BASE}/v1beta/models/${model}:streamGenerateContent?alt=sse`, {
-          method: 'POST', signal: ac.signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': cfg.apiKey },
-          body: JSON.stringify({ contents, systemInstruction: SYSTEM_INSTRUCTION, generationConfig: gen })
+          method: 'POST', signal: ac.signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+          body: JSON.stringify({ contents: sendContents, systemInstruction: sysInst, generationConfig: gen })
         });
-      } catch (e) { refund(); return fail(res, 502, 'Gemini에 연결하지 못했습니다.', H(usedOf(a, req))); }
-      if (!up.ok) { refund(); res.writeHead(up.status, { 'Content-Type': 'application/json; charset=utf-8', ...H(usedOf(a, req)) }); return res.end(await up.text()); }
-      res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', ...H(usedOf(a, req)) });
-      res.flushHeaders();
+      } catch (e) { return bail(502, 'Gemini에 연결하지 못했습니다.'); }
+      if (!up.ok) {
+        const raw = await up.text();
+        let msg = raw.slice(0, 200); try { msg = JSON.parse(raw).error.message || msg; } catch {}
+        return bail(up.status, msg, raw);
+      }
+      if (!early) openSSE();
       return Readable.fromWeb(up.body).on('error', () => res.end()).pipe(res);
     }
     fail(res, 404, 'Not found');
   } catch (err) { if (!res.headersSent) fail(res, 500, err.message || '서버 오류'); else res.end(); }
-}).listen(PORT, () => console.log(`Gims AI → http://localhost:${PORT}  (관리자 IP: ${ADMIN_IPS.join(', ')}, 기본 일일 한도: ${DAILY_LIMIT}, 인증 보너스: +${VERIFY_BONUS})`));
+});
+
+(async () => {
+  db = await dbmod.init({ uri: process.env.MONGODB_URI, dbName: process.env.MONGODB_DB || 'gimsai', dataDir: DATA });
+  Object.assign(cfg, db.data.cfg); Object.assign(users, db.data.users); Object.assign(sess, db.data.sess); usage = db.data.usage;
+  ensureAdmin();
+  server.listen(PORT, () => console.log(`Gims AI → http://localhost:${PORT}  [저장소: ${db.kind}]  (관리자 IP: ${ADMIN_IPS.join(', ') || '없음'}, 기본 일일 한도: ${DAILY_LIMIT}, 인증 보너스: +${VERIFY_BONUS})`));
+  const bye = async () => { try { await db.close(); } catch {} process.exit(0); };
+  process.on('SIGINT', bye); process.on('SIGTERM', bye);
+})().catch(e => { console.error('시작 실패:', e.message); process.exit(1); });
