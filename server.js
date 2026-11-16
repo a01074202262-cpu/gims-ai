@@ -4,6 +4,12 @@ const { Readable } = require('stream');
 const block = require('./block');
 const dbmod = require('./db');
 const reasoning = require('./reasoning');
+const jobsmod = require('./jobs');
+const store = require('./store');
+const TOOLS = require('./tool_registry');
+const WS = require('./workspace');
+const { AGENT_SYSTEM } = require('./agent');
+const gemini = require('./gemini');
 
 const PORT = process.env.PORT || 3000;
 const ADMIN_IPS = (process.env.ADMIN_IPS || '').split(',').map(s => s.trim()).filter(Boolean); // 관리자(화이트리스트) IP
@@ -39,7 +45,7 @@ const ROOMS = path.join(DATA, 'rooms');
 console.log('[data] 저장 경로:', DATA);
 
 // ---------- 저장소 (메모리 캐시 + MongoDB 또는 JSON 파일) ----------
-// MONGODB_URI 환경변수가 있으면 MongoDB 에 API 키·사용자·세션·사용량·채팅방을 모두 저장
+// DB 또는 MONGODB_URI 환경변수가 있으면 MongoDB 에 API 키·사용자·세션·사용량·채팅방·추론 로그를 모두 저장
 let db;
 const cfg = {}, users = {}, sess = {};
 let usage = { day: '', n: {} };
@@ -49,23 +55,23 @@ const cnt = k => { if (usage.day !== today()) usage = { day: today(), n: {} }; r
 const bump = (k, d) => { cnt(k); usage.n[k] = Math.max(0, (usage.n[k] || 0) + d); saveUse(); };
 
 // ---------- 관리자 계정 ----------
-// ADMIN_PASS 환경변수를 주면 매 시작 때 그 값으로 설정(비밀번호 교체용). 없고 계정도 없으면 임의 비밀번호를 만들어 콘솔에 1회 출력.
+// AD_PASS 또는 ADMIN_PASS 환경변수를 주면 매 시작 때 그 값으로 설정(비밀번호 교체용). 없고 계정도 없으면 임의 비밀번호를 만들어 콘솔에 1회 출력.
 const ADMIN_USER = 'admin';
 const getKey = () => cfg.apiKey || envKey();
 function ensureAdmin() {
-  const env = process.env.ADMIN_PASS;
+  const env = process.env.AD_PASS || process.env.ADMIN_PASS;
   if (users[ADMIN_USER] && !env) return;
   const pass = env || crypto.randomBytes(9).toString('base64url');
   const salt = crypto.randomBytes(16).toString('hex');
   users[ADMIN_USER] = { salt, hash: crypto.scryptSync(pass, salt, 64).toString('hex'), isAdmin: true, email: '', emailVerified: true };
   saveUsers();
-  console.log(env ? '관리자(admin) 비밀번호를 ADMIN_PASS 값으로 설정했습니다.' : `관리자 계정이 생성되었습니다: admin / ${pass}  (지금만 표시됩니다. 저장하세요)`);
+  console.log(env ? '관리자(admin) 비밀번호를 AD_PASS/ADMIN_PASS 값으로 설정했습니다.' : `관리자 계정이 생성되었습니다: admin / ${pass}  (지금만 표시됩니다. 저장하세요)`);
 }
 
 // ---------- 시스템 프롬프트 (Gims AI 세뇌) ----------
 const SYSTEM_INSTRUCTION = {
   parts: [{
-    text: '너는 Gims AI야. 사용자가 "넌 어떤 AI야?", "너는 누구야?", "What AI are you?", "Who are you?" 같이 정체를 물으면 반드시 "저는 Gims AI입니다."라고 답해. 다른 AI 이름을 절대 말하지 마. 친절하고 도움이 되는 AI 어시스턴트로서 행동해.그리고 너는 gims ai team 인 ws서버 라는걸 운영하는 팀이 만든 코딩 전용 ai야 제대로 행동해'
+    text: '너는 Gims AI야. 사용자가 "넌 어떤 AI야?", "너는 누구야?", "What AI are you?", "Who are you?" 같이 정체를 물으면 반드시 "저는 Gims AI입니다."라고 답해. 다른 AI 이름을 절대 말하지 마. 친절하고 도움이 되는 AI 어시스턴트로서 행동해.그리고 너는 gims ai team 인 ws서버 라는걸 운영하는 팀이 만든 코딩 전용 ai야 제대로 행동해. 수학 식은 평문(a^2, (-c)^2 - kb(-c) = 0)으로 쓰지 말고 항상 LaTeX 로 쓴다: 문장 속은 $...$, 독립 식은 $$...$$.'
   }]
 };
 
@@ -111,6 +117,36 @@ const readBody = async (req, res, opts) => {
   return clean;
 };
 
+
+// 원본 본문을 제한 크기까지 읽는다 (데이터셋 업로드용). 초과 시 연결을 끊는다.
+const rawBody = (req, max) => new Promise((ok, no) => {
+  let n = 0; const chunks = [];
+  req.on('data', c => {
+    n += c.length;
+    if (n > max) { no(Object.assign(new Error('파일이 너무 큽니다 (10MB 이하)'), { status: 413 })); req.destroy(); return; }
+    chunks.push(c);
+  });
+  req.on('end', () => ok(Buffer.concat(chunks).toString('utf8')));
+  req.on('error', no);
+});
+
+// 백그라운드로 끝난 작업의 답변을 채팅방에 저장 (클라이언트가 붙어 있었어도 동일 내용이라 덮어써도 무방)
+async function persistJob(job) {
+  if (!job.roomId || job.status === 'error' || !job.answer.trim()) return;
+  await db.updateRoom(job.user, d => {
+    if (d.tomb[job.roomId]) return false;
+    const room = d.rooms.find(r => r.id === job.roomId); if (!room) return false;
+    const msgs = room.messages = Array.isArray(room.messages) ? room.messages : [];
+    if (msgs.some(x => x.jobId === job.id)) return false;
+    if (job.userText && msgs[msgs.length - 1]?.role !== 'user') {
+      msgs.push({ role: 'user', text: job.userText });
+      if (msgs.length === 1 && room.title === '새 대화') room.title = job.userText.slice(0, 32) || '새 대화';
+    }
+    msgs.push({ role: 'assistant', text: job.answer.trim(), jobId: job.id });
+    room.updatedAt = Date.now();
+    d.rooms.sort((x, y) => (y.updatedAt || 0) - (x.updatedAt || 0)); d.rev++;
+  });
+}
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x'), p = url.pathname, m = req.method;
@@ -313,21 +349,118 @@ const server = http.createServer(async (req, res) => {
 
     // ----- 계정별 채팅방 (기기 간 공유) -----
     if (p === '/api/rooms') {
-      const d = await db.getRoom(a.user);
-      if (m === 'GET') return url.searchParams.get('rev') === String(d.rev) ? send(res, 200, { rev: d.rev, same: true }) : send(res, 200, { rev: d.rev, rooms: d.rooms });
+      if (m === 'GET') {
+        const d = await db.getRoom(a.user);
+        return url.searchParams.get('rev') === String(d.rev) ? send(res, 200, { rev: d.rev, same: true }) : send(res, 200, { rev: d.rev, rooms: d.rooms });
+      }
       if (m === 'PUT') {
         const _b = await readBody(req, res); if (!_b) return;
         const { rooms = [], deleted = [] } = _b;
         if (!Array.isArray(rooms) || rooms.length > 300 || !Array.isArray(deleted)) return fail(res, 400, '잘못된 요청입니다.');
-        const map = new Map(d.rooms.map(r => [r.id, r]));
-        for (const id of deleted) { map.delete(id); d.tomb[id] = Date.now(); }
-        for (const r of rooms) {
-          if (!r || typeof r.id !== 'string' || !Array.isArray(r.messages) || d.tomb[r.id]) continue;
-          const old = map.get(r.id); if (!old || (r.updatedAt || 0) >= (old.updatedAt || 0)) map.set(r.id, r);
-        }
-        d.rooms = [...map.values()].sort((x, y) => (y.updatedAt || 0) - (x.updatedAt || 0)); d.rev++;
-        await db.setRoom(a.user, d); return send(res, 200, { rev: d.rev, rooms: d.rooms });
+        // 읽기→병합→쓰기를 사용자별로 직렬화 (동시 PUT · 백그라운드 작업 저장이 서로 덮어쓰지 않게)
+        const d = await db.updateRoom(a.user, d => {
+          const map = new Map(d.rooms.map(r => [r.id, r]));
+          for (const id of deleted) { map.delete(id); d.tomb[id] = Date.now(); }
+          for (const r of rooms) {
+            if (!r || typeof r.id !== 'string' || !Array.isArray(r.messages) || d.tomb[r.id]) continue;
+            const old = map.get(r.id); if (!old || (r.updatedAt || 0) >= (old.updatedAt || 0)) map.set(r.id, r);
+          }
+          d.rooms = [...map.values()].sort((x, y) => (y.updatedAt || 0) - (x.updatedAt || 0)); d.rev++;
+        });
+        return send(res, 200, { rev: d.rev, rooms: d.rooms });
       }
+    }
+
+    // ----- 데이터셋 업로드 (본인만 조회·사용, 최대 10MB, 메모리 저장) -----
+    if (p === '/api/data') {
+      if (m === 'GET') return send(res, 200, { datasets: store.list(a.user), stats: store.stats() });
+      if (m === 'POST') {
+        const len = Number(req.headers['content-length'] || 0);
+        if (len > store.MAX_DATASET) return fail(res, 413, '파일은 10MB 이하여야 합니다.');
+        let text;
+        try { text = await rawBody(req, store.MAX_DATASET); }
+        catch (e) { return fail(res, e.status || 400, e.message); }
+        const name = String(url.searchParams.get('name') || 'dataset').replace(/[^\w.\-가-힣 ]/g, '_').slice(0, 80);
+        if (!/\.(csv|json|txt|tsv)$/i.test(name)) return fail(res, 415, 'csv, json, txt, tsv 파일만 지원합니다 (파일 이름 확장자 확인).');
+        if (!text.trim()) return fail(res, 400, '빈 파일입니다.');
+        try { return send(res, 200, store.put(a.user, name, text)); }
+        catch (e) { return fail(res, 413, e.message); }
+      }
+      return fail(res, 405, '허용되지 않는 메서드입니다.');
+    }
+    if (p.startsWith('/api/data/') && m === 'DELETE') {
+      const id = decodeURIComponent(p.slice('/api/data/'.length));
+      const ok = store.remove(a.user, id);
+      return send(res, ok ? 200 : 404, { ok });
+    }
+
+    // ----- 작업 공간: AI가 만든 파일 조회·다운로드 -----
+    if (p === '/api/workspace' && m === 'GET') return send(res, 200, { files: WS.listFiles(a.user), stats: WS.stats(a.user) });
+    if (p === '/api/workspace' && m === 'DELETE') { WS.clear(a.user); return send(res, 200, { ok: true }); }
+    if (p === '/api/workspace/file' && m === 'GET') {
+      try {
+        const fp = url.searchParams.get('path') || '';
+        const c = WS.readFile(a.user, fp);
+        if (url.searchParams.get('download')) {
+          // 진짜 파일로 내려받기: 파일 이름은 경로의 마지막 부분 (한글 등은 RFC 5987 로 인코딩)
+          const base = fp.split('/').pop() || 'file.txt';
+          const ascii = base.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
+          const buf = Buffer.from(c, 'utf8');
+          res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(base)}`, 'Content-Length': buf.length, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+          return res.end(buf);
+        }
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+        return res.end(c);
+      } catch (e) { return fail(res, 404, e.message); }
+    }
+    if (p === '/api/workspace/zip' && m === 'GET') {
+      try {
+        const only = (url.searchParams.get('paths') || '').split(',').map(x => x.trim()).filter(Boolean).slice(0, 200);
+        const buf = WS.zip(a.user, only);
+        res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Disposition': `attachment; filename="${only.length ? 'files' : 'workspace'}.zip"`, 'Content-Length': buf.length, 'Cache-Control': 'no-store' });
+        return res.end(buf);
+      } catch (e) { return fail(res, 404, e.message); }
+    }
+
+    // ----- 에이전트: AI가 작업 공간에 파일을 직접 만들고 검사한다 (1회 = 질문 4회분) -----
+    if (p === '/api/agent' && m === 'POST') {
+      const apiKey = getKey();
+      if (!apiKey) return fail(res, 503, '관리자가 아직 API 키를 등록하지 않았습니다.');
+      const uu = users[a.user];
+      if (uu && uu.banned) return fail(res, 403, '차단된 계정입니다.');
+      const COST = 4;
+      const usedNow = usedOf(a, req), limNow = limitOf(a);
+      if (!a.admin && usedNow + COST > limNow) return fail(res, 429, `에이전트는 질문 ${COST}회분이 차감됩니다. 오늘 남은 한도가 부족해요.`);
+      const _b = await readBody(req, res, { types: ['proto'] }); if (!_b) return;
+      const { model, message } = _b;
+      if (!/^[\w.\-]+$/.test(model || '') || typeof message !== 'string' || !message.trim() || message.length > 4000) return fail(res, 400, '잘못된 요청입니다.');
+      if (!a.admin) { bump('u:' + a.user, COST); bump('ip:' + ip(req), COST); }
+      const refund = () => { if (!a.admin) { bump('u:' + a.user, -COST); bump('ip:' + ip(req), -COST); } };
+      const ac = new AbortController(); res.on('close', () => ac.abort());
+      try {
+        const r = await TOOLS.runToolLoop({
+          base: BASE, key: apiKey, model, system: AGENT_SYSTEM, groups: ['workspace', 'coding', 'vserver', 'sandbox'], mode: 'AUTO', maxRounds: 14, temperature: 0.3,
+          signal: ac.signal, owner: a.user,
+          contents: [{ role: 'user', parts: [{ text: message }] }]
+        });
+        return send(res, 200, { text: r.text, trace: r.trace, files: WS.listFiles(a.user) });
+      } catch (e) {
+        refund();
+        return fail(res, 502, e.message || '에이전트 실행에 실패했습니다.');
+      }
+    }
+
+    // ----- 백그라운드 작업: 상태 조회 · 취소 (창을 닫았다 열어도 이어받기) -----
+    if (p === '/api/chat/job' && m === 'GET') {
+      const j = url.searchParams.get('active') ? jobsmod.active(a.user) : jobsmod.get(a.user, String(url.searchParams.get('id') || ''));
+      if (!j) return url.searchParams.get('active') ? send(res, 200, {}) : fail(res, 404, '작업을 찾을 수 없습니다.');
+      return send(res, 200, j.snapshot());
+    }
+    if (p === '/api/chat/cancel' && m === 'POST') {
+      const _b = await readBody(req, res); if (!_b) return;
+      const j = jobsmod.get(a.user, String(_b.id || ''));
+      if (j && j.status === 'running') j.ac.abort();
+      return send(res, 200, { ok: true });
     }
 
     // ----- 채팅 (모든 기기가 관리자가 등록한 키를 사용) -----
@@ -341,6 +474,7 @@ const server = http.createServer(async (req, res) => {
       // 채팅 본문은 SQL/XSS 키워드가 정상 질문일 수 있음 → 프로토타입 오염·크기만 검사
       const _b = await readBody(req, res, { types: ['proto'] }); if (!_b) return;
       const { model, contents, temperature, noThink, reason } = _b;
+      const jobId = typeof _b.jobId === 'string' && /^[\w-]{6,64}$/.test(_b.jobId) ? _b.jobId : '';
       if (!/^[\w.\-]+$/.test(model || '') || !Array.isArray(contents) || !contents.length || contents.length > 60) return fail(res, 400, '잘못된 요청입니다.');
       // 추론 설정: reason = { level: 'low'|'medium'|'high'|'max' } — 비용은 서버 표(reasoning.LEVELS)가 결정
       const lv = reason && typeof reason === 'object' && typeof reason.level === 'string' && Object.hasOwn(reasoning.LEVELS, reason.level) ? reasoning.LEVELS[reason.level] : null;
@@ -350,22 +484,78 @@ const server = http.createServer(async (req, res) => {
       if (noThink && !lv) gen.thinkingConfig = { thinkingBudget: 0 };
       if (!a.admin) { bump('u:' + a.user, cost); bump('ip:' + ip(req), cost); }
       const refund = (n = cost) => { if (!a.admin) { bump('u:' + a.user, -n); bump('ip:' + ip(req), -n); } };
-      const ac = new AbortController(); res.on('close', () => ac.abort());
+      // 작업(job)으로 실행하면 브라우저 연결이 끊겨도 서버가 끝까지 생성하고 채팅방에 저장한다 (jobId 없는 구형 클라이언트는 기존 동작)
+      const job = jobId ? jobsmod.create({ user: a.user, id: jobId, roomId: typeof _b.roomId === 'string' ? _b.roomId.slice(0, 80) : '', userText: typeof _b.userText === 'string' ? _b.userText.slice(0, 20000) : '' }) : null;
+      if (jobId && !job) { refund(); return fail(res, 409, '이미 처리 중인 요청입니다.', H(usedOf(a, req))); }
+      const ac = job ? job.ac : new AbortController();
+      if (!job) res.on('close', () => ac.abort());
+      let finished = false;
+      const finish = (status, err) => {
+        if (!job || finished) return; finished = true; clearInterval(ka);
+        job.finish(status, err);
+        persistJob(job).catch(e => console.warn('[job] 저장 실패:', e.message));
+      };
+      // 프록시(Render 등)의 유휴 연결 종료 방지: 연결돼 있는 동안 주기적으로 주석 ping
+      const ka = setInterval(() => { if (res.headersSent && !res.writableEnded && !res.destroyed) res.write(': ping\n\n'); }, 15000);
+      res.on('close', () => clearInterval(ka));
 
       // 추론 모드는 단계 진행 상황을 먼저 흘려보내야 하므로 SSE 헤더를 미리 연다
       const early = !!lv;
-      const emit = o => { if (!res.writableEnded) res.write('data: ' + JSON.stringify(o) + '\n\n'); };
-      const openSSE = () => { res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', ...H(usedOf(a, req)) }); res.flushHeaders(); };
+      const emit = o => { job?.record(o); if (!res.writableEnded && !res.destroyed) res.write('data: ' + JSON.stringify(o) + '\n\n'); };
+      const openSSE = () => { if (res.headersSent || res.destroyed) return; res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', ...H(usedOf(a, req)) }); res.flushHeaders(); };
+
+      // 파일/프로젝트 생성 요청 → 도구로 실제 파일 생성 (마크다운 코드블록 대신)
+      const lastText = (() => {
+        try { return (contents[contents.length - 1]?.parts || []).map(x => x.text || '').join(' '); }
+        catch { return ''; }
+      })();
+      // 파일 생성 요청 판정: 확실한 표현이면 바로, 막연한 "만들어줘" 는 코딩 의도일 때만
+      const strongFile = /(파일|file)\s*(로|을|를)?\s*(만들|생성|저장|작성|주세요|줘|달라|다운|받)|파일로|다운\s*로드|다운\s*받|\bzip\b|워크스페이스|실제\s*파일|프로젝트\s*(를\s*)?만들|index\.html|\.(lua|luau|js|ts|py|html|css|json|md|txt|sh|yml|csv)\s*(로|을|를)?\s*(만들|생성|저장|작성|줘)|(lua|luau|루아|루아우)\s*(파일|스크립트)\s*(만들|작성|생성|짜|줘)/i.test(lastText);
+      const weakFile = /(만들|작성|생성|짜)(어|해)?\s*(줘|주세요|달라)/.test(lastText) && ['coding', 'game', 'security'].includes(TOOLS.classify(lastText).intent);
+      const wantsFiles = strongFile || weakFile;
+      if (wantsFiles) {
+        openSSE();
+        try {
+          emit({ gims: { id: 'files', label: '파일 생성 도구 실행', state: 'start' } });
+          // 이번 요청에서 새로 만들어졌거나 바뀐 파일만 카드로 보여주기 위해 실행 전 상태를 기억한다
+          const before = new Map(WS.allFiles(a.user).map(f => [f.path, f.content]));
+          const r = await TOOLS.runToolLoop({
+            base: BASE, key: apiKey, model,
+            system: AGENT_SYSTEM + '\n' + (SYSTEM_INSTRUCTION.parts[0]?.text || ''),
+            groups: ['workspace', 'coding', 'vserver', 'sandbox'], mode: 'AUTO', maxRounds: 14, temperature: 0.25,
+            signal: ac.signal, owner: a.user, contents
+          });
+          const changed = WS.allFiles(a.user).filter(f => before.get(f.path) !== f.content);
+          const sizes = new Map(WS.listFiles(a.user).map(f => [f.path, f.bytes]));
+          emit({ gims: { id: 'files', label: changed.length ? `파일 ${changed.length}개 생성 완료` : '파일 생성 완료', state: 'done', ms: 0, detail: changed.map(f => f.path).join(', ').slice(0, 160) } });
+          // :::files 블록은 화면에서 다운로드 카드로 바뀐다 (줄마다 "경로<TAB>바이트")
+          const card = changed.length ? '\n\n:::files\n' + changed.map(f => `${f.path}\t${sizes.get(f.path) || 0}`).join('\n') + '\n:::\n' : '';
+          const body = (r.text || '').trim() || (changed.length ? '요청하신 파일을 만들었어요.' : '파일을 만들지 못했어요. 요청을 조금 더 구체적으로 적어 주세요.');
+          emit({ candidates: [{ content: { parts: [{ text: body + card }] } }] });
+          if (lv) refund(cost - 1);   // 추론 모드에서 파일 도구로 처리한 경우 1회분만 차감
+          emit({ gims: { used: usedOf(a, req) } });
+          finish('done');
+          return res.end();
+        } catch (e) {
+          if (ac.signal.aborted) { refund(); finish('cancelled'); return res.end(); }
+          console.warn('[files] 도구 실패 → 일반 응답:', e.message);
+          emit({ gims: { id: 'files', label: '파일 도구 실패 → 일반 답변', state: 'done', ms: 0, detail: String(e.message || '').slice(0, 80) } });
+          // fall through
+        }
+      }
+
       if (early) openSSE();
 
       let sendContents = contents, sysInst = SYSTEM_INSTRUCTION;
       if (lv) {   // DeepSeek-R1 방식: 분석 → 풀이 N개 → 검증 → 수정 → (아래에서) 최종 답 스트리밍
         try {
-          const r = await reasoning.prepare({ base: BASE, key: apiKey, model, contents, level: lv, signal: ac.signal, onStep: g => emit({ gims: g }) });
+          const r = await reasoning.prepare({ base: BASE, key: apiKey, model, contents, level: lv, signal: ac.signal, onStep: g => emit({ gims: g }), owner: a.user, datasets: store.list(a.user) });
           sendContents = r.contents; sysInst = { parts: [...SYSTEM_INSTRUCTION.parts, { text: r.system }] };
           console.log('[reason]', a.user, reason.level, JSON.stringify(r.stats));
+          // 채팅·API·추론 단계/생각을 Mongo에 기록 (1초 주기 flush와 별도로 즉시 insert)
+          db.logReason && db.logReason({ user: a.user, level: reason.level, model, stats: r.stats, system: String(r.system || '').slice(0, 4000), q: String((contents[contents.length-1]?.parts||[]).map(x=>x.text||'').join('')).slice(0, 2000) }).catch(()=>{});
         } catch (e) {
-          if (ac.signal.aborted && res.destroyed) { refund(); return res.end(); }
+          if (ac.signal.aborted) { refund(); finish('cancelled'); return res.end(); }
           console.warn('[reason] 실패 → 일반 응답으로 대체:', e.message);
           refund(cost - 1);
           emit({ gims: { id: 'fallback', label: '추론 실패 → 일반 답변으로 진행', state: 'done', ms: 0, detail: String(e.message || '').slice(0, 80), used: usedOf(a, req) } });
@@ -374,32 +564,47 @@ const server = http.createServer(async (req, res) => {
       }
 
       const bail = (code, msg, raw) => {
-        refund();
+        refund(); finish(ac.signal.aborted ? 'cancelled' : 'error', msg);
         if (early) { emit({ gims: { used: usedOf(a, req) } }); emit({ error: { message: msg } }); return res.end(); }
         if (raw !== undefined) { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', ...H(usedOf(a, req)) }); return res.end(raw); }
         return fail(res, code, msg, H(usedOf(a, req)));
       };
       let up;
       try {
-        up = await fetch(`${BASE}/v1beta/models/${model}:streamGenerateContent?alt=sse`, {
-          method: 'POST', signal: ac.signal, headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-          body: JSON.stringify({ contents: sendContents, systemInstruction: sysInst, generationConfig: gen })
+        up = await gemini.streamGenerateContent({
+          base: BASE, key: apiKey, model, signal: ac.signal,
+          body: { contents: sendContents, systemInstruction: sysInst, generationConfig: gen }
         });
-      } catch (e) { return bail(502, 'Gemini에 연결하지 못했습니다.'); }
-      if (!up.ok) {
-        const raw = await up.text();
-        let msg = raw.slice(0, 200); try { msg = JSON.parse(raw).error.message || msg; } catch {}
-        return bail(up.status, msg, raw);
+      } catch (e) {
+        const msg = e.friendly ? e.message : (e.message || 'Gemini에 연결하지 못했습니다.');
+        return bail(e.status === 429 ? 429 : 502, msg);
       }
       if (!early) openSSE();
-      return Readable.fromWeb(up.body).on('error', () => res.end()).pipe(res);
+      if (!job) return Readable.fromWeb(up.body).on('error', () => res.end()).pipe(res);
+      // 작업 모드: 업스트림을 직접 읽어 (1) 답변을 기록하고 (2) 연결돼 있으면 그대로 전달한다
+      try {
+        const reader = up.body.getReader(), dec = new TextDecoder();
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const s = dec.decode(value, { stream: true });
+          job.feed(s);
+          if (!res.writableEnded && !res.destroyed) res.write(s);
+        }
+        job.flush();
+        if (!job.answer.trim() && job.error) { refund(); finish('error'); } else finish('done');
+      } catch (e) {
+        if (!job.answer.trim()) refund();
+        finish(ac.signal.aborted ? 'cancelled' : 'error', e.message);
+      }
+      return res.end();
     }
     fail(res, 404, 'Not found');
   } catch (err) { if (!res.headersSent) fail(res, 500, err.message || '서버 오류'); else res.end(); }
 });
 
 (async () => {
-  db = await dbmod.init({ uri: process.env.MONGODB_URI, dbName: process.env.MONGODB_DB || 'gimsai', dataDir: DATA });
+  db = await dbmod.init({ uri: process.env.DB || process.env.MONGODB_URI, dbName: process.env.MONGODB_DB || 'gimsai', dataDir: DATA });
   Object.assign(cfg, db.data.cfg); Object.assign(users, db.data.users); Object.assign(sess, db.data.sess); usage = db.data.usage;
   ensureAdmin();
   server.listen(PORT, () => console.log(`Gims AI → http://localhost:${PORT}  [저장소: ${db.kind}]  (관리자 IP: ${ADMIN_IPS.join(', ') || '없음'}, 기본 일일 한도: ${DAILY_LIMIT}, 인증 보너스: +${VERIFY_BONUS})`));
